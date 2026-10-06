@@ -6,11 +6,11 @@ export async function listEvents() {
   return data.map((event) => ({ id: event.id, time: event.scheduled_at ? new Date(event.scheduled_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "Sin hora", client: event.clients?.full_name ?? "Sin cliente", packageName: event.package_snapshot?.name ?? "Servicio a definir", total: Number(event.sale_total), paid: event.payments.reduce((sum, payment) => sum + Number(payment.amount), 0), status: event.status }));
 }
 
-export async function createEvent({ clientName, phone, email, packageInfo, total, date, time, userId }) {
+export async function createEvent({ clientName, phone, email, location, locality, eventType, details, packageInfo, total, date, time, userId }) {
   const { data: client, error: clientError } = await supabase.from("clients").insert({ full_name: clientName, phone: phone || null, email: email || null }).select("id").single();
   if (clientError) throw clientError;
   const scheduledAt = new Date(`${date}T${time}:00`).toISOString();
-  const { error } = await supabase.from("events").insert({ client_id: client.id, package_id: packageInfo?.id ?? null, scheduled_at: scheduledAt, sale_total: total, package_snapshot: { name: packageInfo?.name ?? "Servicio personalizado", base_price: packageInfo?.base_price ?? total }, created_by: userId });
+  const { error } = await supabase.from("events").insert({ client_id: client.id, package_id: packageInfo?.id ?? null, scheduled_at: scheduledAt, sale_total: total, location: location || null, locality: locality || null, event_type: eventType || null, details: details || null, package_snapshot: { name: packageInfo?.name ?? "Servicio personalizado", base_price: packageInfo?.base_price ?? total }, created_by: userId });
   if (error) throw error;
 }
 
