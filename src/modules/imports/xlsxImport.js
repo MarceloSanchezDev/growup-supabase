@@ -52,6 +52,7 @@ export async function readGrowUpWorkbook(file) {
         balance: Math.max(saleTotal - deposit, 0),
         details: String(row[dateIndex + 10] ?? "").trim() || null,
         service: String(row[dateIndex + 11] ?? "").trim() || null,
+        cancelled: [row[dateIndex + 1], row[dateIndex + 10], row[dateIndex + 11]].some((value) => String(value ?? "").toLowerCase().includes("cancel")),
       });
     });
   });
