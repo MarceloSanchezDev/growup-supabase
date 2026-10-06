@@ -9,6 +9,7 @@ import {
   rescheduleEvent,
 } from "../modules/events/eventService";
 import { eventStatusLabel } from "../modules/events/demoEvents";
+import { downloadEventsCsv } from "../modules/events/exportEvents";
 import {
   createExpense,
   listExpenses,
@@ -282,6 +283,9 @@ export default function App() {
                     onClick={() => { window.location.hash = "#importar"; window.location.reload(); }}
                   >
                     Importar historial
+                  </button>
+                  <button className="link-button" onClick={() => downloadEventsCsv(events)}>
+                    Exportar Excel
                   </button>
                 </>
               )}
