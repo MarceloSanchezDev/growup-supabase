@@ -20,6 +20,11 @@ import {
 } from "../modules/packages/packageService";
 import { listTeam, updateMemberRole } from "../modules/team/teamService";
 import ImportScreen from "../modules/imports/ImportScreen";
+import ReportsScreen from "../modules/reports/ReportsScreen";
+import {
+  listNotifications,
+  markNotificationsRead,
+} from "../modules/notifications/notificationService";
 import { ars } from "../shared/money";
 import { isSupabaseConfigured, supabase } from "../supabase/client";
 
@@ -30,6 +35,7 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const [packages, setPackages] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [search, setSearch] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(new Date().toISOString().slice(0, 7));
   const [calendarDay, setCalendarDay] = useState("");
@@ -53,11 +59,12 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (!session) return;
-    Promise.all([getCurrentProfile(), listEvents(), listPackages()])
-      .then(([currentProfile, currentEvents, currentPackages]) => {
+    Promise.all([getCurrentProfile(), listEvents(), listPackages(), listNotifications().catch(() => [])])
+      .then(([currentProfile, currentEvents, currentPackages, currentNotifications]) => {
         setProfile(currentProfile);
         setEvents(currentEvents);
         setPackages(currentPackages);
+        setNotifications(currentNotifications);
         if (currentProfile.role === "owner") {
           listTeam()
             .then(setTeam)
@@ -92,6 +99,14 @@ export default function App() {
     [events],
   );
   const currentMonth = new Date().toISOString().slice(0, 7);
+  const next24Hours = useMemo(() => {
+    const now = new Date();
+    const limit = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    return events.filter((item) => {
+      const scheduledAt = new Date(item.scheduledAt);
+      return !["cancelled", "rescheduled", "completed"].includes(item.status) && scheduledAt >= now && scheduledAt <= limit;
+    });
+  }, [events]);
   const monthlyExpenses = useMemo(
     () =>
       expenses
@@ -157,6 +172,7 @@ export default function App() {
         amount: Number(data.get("amount")),
         date: data.get("date"),
         note: data.get("note"),
+        eventId: data.get("eventId"),
       });
       setExpenses(await listExpenses());
       setShowExpenseForm(false);
@@ -216,6 +232,15 @@ export default function App() {
     setProfile(await getCurrentProfile());
     setMessage("Tu cuenta ahora es la dueña de GrowUp.");
   }
+  async function readNotifications() {
+    const unreadIds = notifications.filter((item) => !item.read_at).map((item) => item.id);
+    try {
+      await markNotificationsRead(unreadIds);
+      setNotifications((items) => items.map((item) => ({ ...item, read_at: item.read_at ?? new Date().toISOString() })));
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
   if (!isSupabaseConfigured)
     return (
       <main className="auth-page">
@@ -230,6 +255,8 @@ export default function App() {
   if (!session) return <AuthScreen />;
   if (window.location.hash === "#importar")
     return <ImportScreen profile={profile} userId={session.user.id} />;
+  if (window.location.hash === "#reportes")
+    return <ReportsScreen profile={profile} events={events} expenses={expenses} team={team} onBack={() => { window.location.hash = ""; window.location.reload(); }} />;
   const canEditEvents = profile?.role !== "viewer";
   return (
     <div className="app-shell">
@@ -287,6 +314,9 @@ export default function App() {
                   <button className="link-button" onClick={() => downloadEventsCsv(events)}>
                     Exportar Excel
                   </button>
+                  <button className="link-button" onClick={() => { window.location.hash = "#reportes"; window.location.reload(); }}>
+                    Ver reportes
+                  </button>
                 </>
               )}
               {canEditEvents && (
@@ -327,6 +357,8 @@ export default function App() {
           <section className="content-grid">
             <CalendarAgenda events={filteredEvents} month={calendarMonth} selectedDay={calendarDay} onMonthChange={(month) => { setCalendarMonth(month); setCalendarDay(""); }} onSelectDay={setCalendarDay} canEdit={canEditEvents} onPayment={setPaymentEvent} onAction={setActionEvent} />
             <div className="side">
+              <ReminderPanel events={next24Hours} />
+              <NotificationPanel notifications={notifications} onRead={readNotifications} />
               <article className="result">
                 <span>Resultado mensual</span>
                 <strong>{ars(totals.collected - monthlyExpenses)}</strong>
@@ -403,6 +435,7 @@ export default function App() {
       )}{" "}
       {showExpenseForm && (
         <ExpenseForm
+          events={events}
           onClose={() => setShowExpenseForm(false)}
           onSubmit={saveExpense}
         />
@@ -422,6 +455,43 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+function ReminderPanel({ events }) {
+  return (
+    <article className="review reminders">
+      <h2>Próximas 24 horas <b>{events.length}</b></h2>
+      {events.length ? events.map((event) => (
+        <div className="reminder" key={event.id}>
+          <strong>{event.client} · {event.time}</strong>
+          <span>{event.eventType || event.packageName}</span>
+          <span>{[event.location, event.locality].filter(Boolean).join(" · ") || "Lugar a confirmar"}</span>
+          {event.phone && <span>Tel. {event.phone}</span>}
+          <small>Saldo: {ars(Math.max(event.total - event.paid, 0))}</small>
+        </div>
+      )) : <p className="empty">No hay eventos programados en las próximas 24 horas.</p>}
+    </article>
+  );
+}
+
+function NotificationPanel({ notifications, onRead }) {
+  const unread = notifications.filter((item) => !item.read_at).length;
+  return (
+    <article className="review notifications">
+      <h2>Notificaciones {unread > 0 && <b>{unread}</b>}</h2>
+      {notifications.length ? <>
+        <div className="notification-list">
+          {notifications.slice(0, 5).map((item) => (
+            <div className={item.read_at ? "notification read" : "notification"} key={item.id}>
+              <strong>{item.message}</strong>
+              <span>{new Date(item.created_at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}</span>
+            </div>
+          ))}
+        </div>
+        {unread > 0 && <button className="link-button" onClick={onRead}>Marcar como leídas</button>}
+      </> : <p className="empty">Todavía no tenés notificaciones.</p>}
+    </article>
   );
 }
 
@@ -529,7 +599,7 @@ function PackageForm({ onClose, onSubmit }) {
     </div>
   );
 }
-function ExpenseForm({ onClose, onSubmit }) {
+function ExpenseForm({ events, onClose, onSubmit }) {
   const today = new Date().toISOString().slice(0, 10);
   return (
     <div className="modal-backdrop">
@@ -557,6 +627,13 @@ function ExpenseForm({ onClose, onSubmit }) {
         <label>
           Nota opcional
           <input name="note" placeholder="Detalle interno" />
+        </label>
+        <label>
+          Asociar a un evento (opcional)
+          <select name="eventId" defaultValue="">
+            <option value="">Gasto general del negocio</option>
+            {events.filter((item) => !["cancelled", "rescheduled"].includes(item.status)).map((item) => <option key={item.id} value={item.id}>{item.client} · {item.packageName}</option>)}
+          </select>
         </label>
         <div className="actions">
           <button type="button" onClick={onClose}>
