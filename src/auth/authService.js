@@ -7,7 +7,14 @@ export async function signInWithPassword(email, password) {
 
 export async function signUpWithPassword(email, password, fullName) {
   if (!supabase) throw new Error("Supabase todavía no está configurado.");
-  return supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } });
+  return supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: fullName },
+      emailRedirectTo: window.location.origin,
+    },
+  });
 }
 
 export async function signOut() {
