@@ -23,3 +23,16 @@ export async function addPayment({ eventId, amount, note, userId }) {
   });
   if (error) throw error;
 }
+
+export async function cancelEvent(eventId, reason) {
+  const { error } = await supabase.rpc("cancel_event", { p_event_id: eventId, p_reason: reason || null });
+  if (error) throw error;
+}
+
+export async function rescheduleEvent(eventId, date, time) {
+  const { error } = await supabase.rpc("reschedule_event", {
+    p_event_id: eventId,
+    p_scheduled_at: new Date(`${date}T${time}:00`).toISOString(),
+  });
+  if (error) throw error;
+}
