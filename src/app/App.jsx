@@ -277,6 +277,12 @@ export default function App() {
                   >
                     + Gasto
                   </button>
+                  <button
+                    className="link-button"
+                    onClick={() => { window.location.hash = "#importar"; window.location.reload(); }}
+                  >
+                    Importar historial
+                  </button>
                 </>
               )}
               {canEditEvents && (
