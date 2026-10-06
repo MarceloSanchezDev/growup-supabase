@@ -3,7 +3,7 @@ import { supabase } from "../../supabase/client";
 export async function listEvents() {
   const { data, error } = await supabase.from("events").select("id, scheduled_at, status, sale_total, package_snapshot, clients(full_name), payments(amount, paid_at)").order("scheduled_at", { ascending: true });
   if (error) throw error;
-  return data.map((event) => ({ id: event.id, time: event.scheduled_at ? new Date(event.scheduled_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "Sin hora", client: event.clients?.full_name ?? "Sin cliente", packageName: event.package_snapshot?.name ?? "Servicio a definir", total: Number(event.sale_total), paid: event.payments.reduce((sum, payment) => sum + Number(payment.amount), 0), status: event.status }));
+  return data.map((event) => ({ id: event.id, scheduledAt: event.scheduled_at, time: event.scheduled_at ? new Date(event.scheduled_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "Sin hora", client: event.clients?.full_name ?? "Sin cliente", packageName: event.package_snapshot?.name ?? "Servicio a definir", total: Number(event.sale_total), paid: event.payments.reduce((sum, payment) => sum + Number(payment.amount), 0), status: event.status }));
 }
 
 export async function createEvent({ clientName, phone, email, location, locality, eventType, details, packageInfo, total, date, time, userId }) {
