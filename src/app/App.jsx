@@ -1,40 +1,22 @@
-import { useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
-import { roles } from "../config/roles";
-import { demoEvents, eventStatusLabel } from "../modules/events/demoEvents";
+import { useEffect, useMemo, useState } from "react";
+import AuthScreen from "../auth/AuthScreen";
+import { getCurrentProfile, signOut } from "../auth/authService";
+import { createEvent, listEvents } from "../modules/events/eventService";
+import { eventStatusLabel } from "../modules/events/demoEvents";
 import { ars } from "../shared/money";
-import { isSupabaseConfigured } from "../supabase/client";
-
-const nav = [
-  ["Inicio", "/"], ["Calendario", "/calendar"], ["Ventas", "/sales"], ["Paquetes", "/packages"], ["Resultados", "/reports"], ["Equipo", "/team"],
-];
+import { isSupabaseConfigured, supabase } from "../supabase/client";
 
 export default function App() {
-  const [events, setEvents] = useState(demoEvents);
-  const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [role] = useState(roles.OWNER);
+  const [session, setSession] = useState(undefined); const [profile, setProfile] = useState(null); const [events, setEvents] = useState([]); const [search, setSearch] = useState(""); const [showForm, setShowForm] = useState(false); const [message, setMessage] = useState("");
+  useEffect(() => { if (!supabase) { setSession(null); return; } supabase.auth.getSession().then(({ data }) => setSession(data.session)); const { data: listener } = supabase.auth.onAuthStateChange((_event, current) => setSession(current)); return () => listener.subscription.unsubscribe(); }, []);
+  useEffect(() => { if (!session) return; Promise.all([getCurrentProfile(), listEvents()]).then(([currentProfile, currentEvents]) => { setProfile(currentProfile); setEvents(currentEvents); }).catch((error) => setMessage(error.message)); }, [session]);
   const filteredEvents = useMemo(() => events.filter((event) => `${event.client} ${event.packageName}`.toLowerCase().includes(search.toLowerCase())), [events, search]);
   const totals = useMemo(() => events.reduce((result, event) => ({ sold: result.sold + event.total, collected: result.collected + event.paid }), { sold: 0, collected: 0 }), [events]);
-
-  function createInquiry(event) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const total = Number(data.get("total")) || 0;
-    setEvents((current) => [...current, { id: crypto.randomUUID(), date: "2026-10-05", time: data.get("time") || "20:00", client: data.get("client") || "Nueva consulta", packageName: data.get("package") || "Paquete a definir", total, paid: 0, status: "pending_deposit" }]);
-    setShowForm(false);
-  }
-
-  return <div className="app-shell">
-    <header className="topbar"><div className="brand"><span className="brand-mark">G</span><div><strong>GrowUp</strong><small>Eventos & experiencias</small></div></div><div className="account"><span className="month">Octubre 2026</span><span className="avatar">MD</span><span>Martina · Dueña</span></div></header>
-    {!isSupabaseConfigured && <div className="setup-notice">Vista de desarrollo con datos de ejemplo. La conexión a Supabase se habilita al cargar las credenciales del proyecto.</div>}
-    <div className="workspace"><aside><nav>{nav.map(([label, to]) => <NavLink key={to} to={to} className={({ isActive }) => isActive ? "active" : ""}>{label}</NavLink>)}</nav><div className="team-card"><b>Tu equipo</b><p>2 vendedoras activas y una administradora.</p><button>Ver permisos</button></div></aside>
-      <main><section className="heading"><div><p>Panel de hoy · Lunes 5 de octubre</p><h1>Todo bajo control.</h1><span>Ventas, señas y eventos en un solo lugar.</span></div><button className="primary" onClick={() => setShowForm(true)}>+ Nuevo evento</button></section>
-      <section className="metrics"><Metric label="Vendido este mes" value={ars(totals.sold)} detail="Eventos registrados" tone="purple"/><Metric label="Cobrado" value={ars(totals.collected)} detail={`${Math.round((totals.collected / Math.max(totals.sold, 1)) * 100)}% del total vendido`} tone="pink"/><Metric label="Pendiente de cobro" value={ars(totals.sold - totals.collected)} detail="Saldos por cobrar" tone="amber"/><Metric label="Costos de viaje" value={ars(118000)} detail="Cargados este mes" tone="teal"/></section>
-      <section className="content-grid"><article className="agenda"><div className="section-head"><div><h2>Agenda de hoy</h2><span>{events.length} eventos y consultas programados</span></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar evento" aria-label="Buscar evento"/></div><div className="event-list">{filteredEvents.map((item) => <div className="event" key={item.id}><time>{item.time}</time><i/><div className="event-main"><b>{item.client}</b><span>{item.packageName}</span></div><div className="event-meta"><b>{ars(item.total)}</b><em className={item.status}>{eventStatusLabel[item.status]}</em></div><button className="more" aria-label={`Opciones de ${item.client}`}>•••</button></div>)}{filteredEvents.length === 0 && <p className="empty">No encontramos eventos con esa búsqueda.</p>}</div><button className="link-button">Ver calendario completo <span>›</span></button></article>
-      <div className="side"><article className="result"><span>Resultado estimado</span><strong>{ars(totals.collected - 118000)}</strong><div><i/></div><small>Calculado sobre lo cobrado menos los costos de viaje cargados.</small></article><article className="review"><h2>Para revisar <b>3</b></h2><p><i/> <span><strong>2 eventos</strong><br/>todavía sin seña mínima</span></p><p><i/> <span><strong>1 reprogramación</strong><br/>pendiente de nueva fecha</span></p></article></div></section></main></div>
-    {showForm && <div className="modal-backdrop" role="presentation"><form className="modal" onSubmit={createInquiry}><button className="close" type="button" onClick={() => setShowForm(false)}>×</button><h2>Nueva consulta</h2><p>Podrás completar la venta, la seña y el horario luego.</p><label>Cliente<input name="client" required placeholder="Nombre del cliente" /></label><label>Paquete o servicio<input name="package" required placeholder="Ej. Spa Kids" /></label><div className="form-row"><label>Horario<input name="time" type="time" /></label><label>Total acordado<input name="total" type="number" min="0" placeholder="0" /></label></div><div className="actions"><button type="button" onClick={() => setShowForm(false)}>Cancelar</button><button className="primary" type="submit">Crear consulta</button></div></form></div>}
-  </div>;
+  async function createInquiry(event) { event.preventDefault(); const data = new FormData(event.currentTarget); try { await createEvent({ clientName: data.get("client"), packageName: data.get("package"), total: Number(data.get("total")), date: data.get("date"), time: data.get("time"), userId: session.user.id }); setEvents(await listEvents()); setShowForm(false); setMessage("Consulta creada correctamente."); } catch (error) { setMessage(error.message); } }
+  async function claimOwner() { const { error } = await supabase.rpc("claim_first_owner"); if (error) { setMessage(error.message); return; } setProfile(await getCurrentProfile()); setMessage("Tu cuenta ahora es la dueña de GrowUp."); }
+  if (!isSupabaseConfigured) return <main className="auth-page"><section className="auth-card"><h1>Falta conectar Supabase</h1><p>Vercel debe terminar de aplicar las variables del proyecto.</p></section></main>;
+  if (session === undefined) return <main className="auth-page">Cargando GrowUp…</main>;
+  if (!session) return <AuthScreen />;
+  return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">G</span><div><strong>GrowUp</strong><small>Eventos & experiencias</small></div></div><div className="account"><span className="avatar">{profile?.full_name?.slice(0, 2).toUpperCase() ?? "GU"}</span><span>{profile?.full_name ?? session.user.email} · {profile?.role ?? "cargando"}</span><button className="sign-out" onClick={signOut}>Salir</button></div></header>{message && <div className="setup-notice">{message}</div>}<div className="workspace"><main><section className="heading"><div><p>Panel de eventos</p><h1>Todo bajo control.</h1><span>Ventas, señas y eventos en un solo lugar.</span></div><button className="primary" onClick={() => setShowForm(true)}>+ Nuevo evento</button></section>{profile?.role === "seller" && <button className="link-button" onClick={claimOwner}>Activar esta primera cuenta como dueña</button>}<section className="metrics"><Metric label="Vendido" value={ars(totals.sold)} detail="Eventos registrados" tone="purple"/><Metric label="Cobrado" value={ars(totals.collected)} detail="Señas y pagos cargados" tone="pink"/><Metric label="Pendiente" value={ars(totals.sold - totals.collected)} detail="Saldos por cobrar" tone="amber"/></section><section className="content-grid"><article className="agenda"><div className="section-head"><div><h2>Agenda</h2><span>{events.length} eventos y consultas</span></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar evento" /></div><div className="event-list">{filteredEvents.map((item) => <div className="event" key={item.id}><time>{item.time}</time><i/><div className="event-main"><b>{item.client}</b><span>{item.packageName}</span></div><div className="event-meta"><b>{ars(item.total)}</b><em className={item.status}>{eventStatusLabel[item.status]}</em></div></div>)}{filteredEvents.length === 0 && <p className="empty">Todavía no hay eventos. Creá la primera consulta para empezar.</p>}</div></article><div className="side"><article className="result"><span>Resultado estimado</span><strong>{ars(totals.collected)}</strong><small>Se descontarán los costos cuando se carguen.</small></article></div></section></main></div>{showForm && <div className="modal-backdrop"><form className="modal" onSubmit={createInquiry}><button className="close" type="button" onClick={() => setShowForm(false)}>×</button><h2>Nueva consulta</h2><label>Cliente<input name="client" required /></label><label>Paquete o servicio<input name="package" required /></label><div className="form-row"><label>Fecha<input name="date" type="date" required /></label><label>Horario<input name="time" type="time" required /></label></div><label>Total acordado<input name="total" type="number" min="0" required /></label><div className="actions"><button type="button" onClick={() => setShowForm(false)}>Cancelar</button><button className="primary" type="submit">Crear consulta</button></div></form></div>}</div>;
 }
-
 function Metric({ label, value, detail, tone }) { return <article className={`metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>; }
