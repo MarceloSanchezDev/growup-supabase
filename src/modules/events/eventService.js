@@ -13,3 +13,13 @@ export async function createEvent({ clientName, packageName, total, date, time, 
   const { error } = await supabase.from("events").insert({ client_id: client.id, scheduled_at: scheduledAt, sale_total: total, package_snapshot: { name: packageName }, created_by: userId });
   if (error) throw error;
 }
+
+export async function addPayment({ eventId, amount, note, userId }) {
+  const { error } = await supabase.from("payments").insert({
+    event_id: eventId,
+    amount,
+    note: note || null,
+    created_by: userId,
+  });
+  if (error) throw error;
+}
