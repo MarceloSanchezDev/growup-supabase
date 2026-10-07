@@ -128,6 +128,7 @@ export default function App() {
         location: data.get("location"),
         locality: data.get("locality"),
         eventType: data.get("eventType"),
+        serviceHours: data.get("serviceHours") ? Number(data.get("serviceHours")) : null,
         details: data.get("details"),
         packageInfo,
         total: packageInfo?.base_price ?? Number(data.get("total")),
@@ -466,6 +467,7 @@ function ReminderPanel({ events }) {
         <div className="reminder" key={event.id}>
           <strong>{event.client} · {event.time}</strong>
           <span>{event.eventType || event.packageName}</span>
+          {event.serviceHours && <span>Duración: {event.serviceHours} {event.serviceHours === 1 ? "hora" : "horas"}</span>}
           <span>{[event.location, event.locality].filter(Boolean).join(" · ") || "Lugar a confirmar"}</span>
           {event.phone && <span>Tel. {event.phone}</span>}
           <small>Saldo: {ars(Math.max(event.total - event.paid, 0))}</small>
@@ -510,6 +512,7 @@ function EventForm({ packages, onClose, onSubmit }) {
           <label>Lugar<input name="location" placeholder="Dirección o salón" /></label>
           <label>Localidad<input name="locality" /></label>
           <label>Tipo de evento<input name="eventType" placeholder="Ej. cumpleaños, boda o 15 años" /></label>
+          <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" placeholder="Ej. 3" /></label>
           <label>Paquete<select name="packageId" required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
           <label>Fecha<input name="date" type="date" required /></label>
           <label>Horario<input name="time" type="time" required /></label>
@@ -698,5 +701,5 @@ function CalendarAgenda({ events, month, selectedDay, onMonthChange, onSelectDay
   const [year, monthNumber] = month.split("-").map(Number); const start = new Date(year, monthNumber - 1, 1).getDay(); const days = new Date(year, monthNumber, 0).getDate();
   const byDay = events.reduce((all, event) => { const date = event.scheduledAt?.slice(0, 10); if (date?.startsWith(month)) (all[date] ??= []).push(event); return all; }, {});
   const selected = selectedDay ? byDay[selectedDay] ?? [] : [];
-  return <article className="agenda calendar-agenda"><div className="section-head"><div><h2>Agenda y calendario</h2><span>{selectedDay ? `Eventos del ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString("es-AR")}` : "Elegí un día para ver el detalle"}</span></div><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} /></div><div className="calendar-week">{"D L M M J V S".split(" ").map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div><div className="calendar-days">{Array.from({ length: start }, (_, index) => <i key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = `${month}-${String(index + 1).padStart(2, "0")}`; const count = byDay[date]?.length ?? 0; return <button type="button" className={selectedDay === date ? "selected" : ""} key={date} onClick={() => onSelectDay(date)}>{index + 1}{count > 0 && <b>{count}</b>}</button>; })}</div>{selectedDay && <div className="event-list">{selected.map((item) => <div className="event" key={item.id}><time>{item.time}</time><i/><div className="event-main"><b>{item.client}</b><span>{item.packageName}</span></div><div className="event-meta"><b>{ars(item.total)}</b><em className={item.status}>{eventStatusLabel[item.status]}</em>{canEdit && <><button className="link-button" onClick={() => onPayment(item)}>{item.paid ? "Registrar pago" : "Registrar seña"}</button><button className="link-button" onClick={() => onAction({ type: "reschedule", event: item })}>Reprogramar</button><button className="link-button" onClick={() => onAction({ type: "cancel", event: item })}>Cancelar</button></>}</div></div>)}{selected.length === 0 && <p className="empty">No hay eventos para este día.</p>}</div>}</article>;
+  return <article className="agenda calendar-agenda"><div className="section-head"><div><h2>Agenda y calendario</h2><span>{selectedDay ? `Eventos del ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString("es-AR")}` : "Elegí un día para ver el detalle"}</span></div><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} /></div><div className="calendar-week">{"D L M M J V S".split(" ").map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div><div className="calendar-days">{Array.from({ length: start }, (_, index) => <i key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = `${month}-${String(index + 1).padStart(2, "0")}`; const count = byDay[date]?.length ?? 0; return <button type="button" className={selectedDay === date ? "selected" : ""} key={date} onClick={() => onSelectDay(date)}>{index + 1}{count > 0 && <b>{count}</b>}</button>; })}</div>{selectedDay && <div className="event-list">{selected.map((item) => <div className="event" key={item.id}><time>{item.time}</time><i/><div className="event-main"><b>{item.client}</b><span>{item.packageName}{item.serviceHours ? ` · ${item.serviceHours} ${item.serviceHours === 1 ? "hora" : "horas"}` : ""}</span></div><div className="event-meta"><b>{ars(item.total)}</b><em className={item.status}>{eventStatusLabel[item.status]}</em>{canEdit && <><button className="link-button" onClick={() => onPayment(item)}>{item.paid ? "Registrar pago" : "Registrar seña"}</button><button className="link-button" onClick={() => onAction({ type: "reschedule", event: item })}>Reprogramar</button><button className="link-button" onClick={() => onAction({ type: "cancel", event: item })}>Cancelar</button></>}</div></div>)}{selected.length === 0 && <p className="empty">No hay eventos para este día.</p>}</div>}</article>;
 }
