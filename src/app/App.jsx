@@ -334,6 +334,13 @@ export default function App() {
               Activar esta primera cuenta como dueña
             </button>
           )}
+          {showEventForm && (
+            <EventForm
+              packages={packages}
+              onClose={() => setShowEventForm(false)}
+              onSubmit={createInquiry}
+            />
+          )}
           <section className="metrics">
             <Metric
               label="Vendido"
@@ -420,13 +427,6 @@ export default function App() {
           </section>
         </main>
       </div>
-      {showEventForm && (
-        <EventForm
-          packages={packages}
-          onClose={() => setShowEventForm(false)}
-          onSubmit={createInquiry}
-        />
-      )}{" "}
       {showPackageForm && (
         <PackageForm
           onClose={() => setShowPackageForm(false)}
@@ -497,78 +497,27 @@ function NotificationPanel({ notifications, onRead }) {
 
 function EventForm({ packages, onClose, onSubmit }) {
   return (
-    <div className="modal-backdrop">
-      <form className="modal" onSubmit={onSubmit}>
-        <button className="close" type="button" onClick={onClose}>
-          ×
-        </button>
-        <h2>Nueva consulta</h2>
-        <label>
-          Cliente
-          <input name="client" required />
-        </label>
-        <div className="form-row">
-          <label>
-            Teléfono
-            <input name="phone" type="tel" />
-          </label>
-          <label>
-            Correo
-            <input name="email" type="email" />
-          </label>
+    <section className="inline-event-form">
+      <div className="inline-form-heading">
+        <div><p>Nueva carga</p><h2>Registrar evento</h2><span>Completá los datos sin salir de la agenda.</span></div>
+        <button className="close" type="button" onClick={onClose} aria-label="Cerrar formulario">×</button>
+      </div>
+      <form onSubmit={onSubmit}>
+        <div className="inline-form-grid">
+          <label>Cliente<input name="client" required /></label>
+          <label>Teléfono<input name="phone" type="tel" /></label>
+          <label>Correo<input name="email" type="email" /></label>
+          <label>Lugar<input name="location" placeholder="Dirección o salón" /></label>
+          <label>Localidad<input name="locality" /></label>
+          <label>Tipo de evento<input name="eventType" placeholder="Ej. cumpleaños, boda o 15 años" /></label>
+          <label>Paquete<select name="packageId" required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
+          <label>Fecha<input name="date" type="date" required /></label>
+          <label>Horario<input name="time" type="time" required /></label>
+          <label className="form-wide">Detalle interno<input name="details" placeholder="Observaciones del evento" /></label>
         </div>
-        <div className="form-row">
-          <label>
-            Lugar
-            <input name="location" placeholder="Dirección o salón" />
-          </label>
-          <label>
-            Localidad
-            <input name="locality" />
-          </label>
-        </div>
-        <label>
-          Tipo de evento
-          <input
-            name="eventType"
-            placeholder="Ej. cumpleaños, boda o 15 años"
-          />
-        </label>
-        <label>
-          Paquete
-          <select name="packageId" required>
-            <option value="">Seleccionar paquete</option>
-            {packages.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.name} · {ars(item.base_price)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="form-row">
-          <label>
-            Fecha
-            <input name="date" type="date" required />
-          </label>
-          <label>
-            Horario
-            <input name="time" type="time" required />
-          </label>
-        </div>
-        <label>
-          Detalle interno
-          <input name="details" placeholder="Observaciones del evento" />
-        </label>
-        <div className="actions">
-          <button type="button" onClick={onClose}>
-            Cancelar
-          </button>
-          <button className="primary" type="submit">
-            Crear consulta
-          </button>
-        </div>
+        <div className="actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary" type="submit">Crear consulta</button></div>
       </form>
-    </div>
+    </section>
   );
 }
 function PackageForm({ onClose, onSubmit }) {
