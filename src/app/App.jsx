@@ -6,6 +6,7 @@ import {
   cancelEvent,
   createEvent,
   listEvents,
+  listSharedCalendarEvents,
   rescheduleEvent,
 } from "../modules/events/eventService";
 import { eventStatusLabel } from "../modules/events/demoEvents";
@@ -35,6 +36,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [team, setTeam] = useState([]);
   const [events, setEvents] = useState([]);
+  const [sharedCalendarEvents, setSharedCalendarEvents] = useState([]);
   const [packages, setPackages] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -61,10 +63,11 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (!session) return;
-    Promise.all([getCurrentProfile(), listEvents(), listPackages(), listNotifications().catch(() => [])])
-      .then(([currentProfile, currentEvents, currentPackages, currentNotifications]) => {
+    Promise.all([getCurrentProfile(), listEvents(), listSharedCalendarEvents().catch(() => []), listPackages(), listNotifications().catch(() => [])])
+      .then(([currentProfile, currentEvents, currentSharedCalendarEvents, currentPackages, currentNotifications]) => {
         setProfile(currentProfile);
         setEvents(currentEvents);
+        setSharedCalendarEvents(currentSharedCalendarEvents);
         setPackages(currentPackages);
         setNotifications(currentNotifications);
         if (currentProfile.role === "owner") {
@@ -82,14 +85,15 @@ export default function App() {
     () => profile?.role === "seller" ? events.filter((event) => event.createdBy === profile.id) : events,
     [events, profile],
   );
+  const calendarEvents = profile?.role === "seller" ? sharedCalendarEvents : events;
   const filteredEvents = useMemo(
     () =>
-      dashboardEvents.filter((event) =>
+      calendarEvents.filter((event) =>
         `${event.client} ${event.packageName}`
           .toLowerCase()
           .includes(search.toLowerCase()),
       ),
-    [dashboardEvents, search],
+    [calendarEvents, search],
   );
   const totals = useMemo(
     () =>
@@ -299,8 +303,8 @@ export default function App() {
           <section className="heading">
             <div>
               <p>{profile?.role === "seller" ? "Mi panel de ventas" : "Panel de eventos"}</p>
-              <h1>{profile?.role === "seller" ? "Mis eventos." : "Todo bajo control."}</h1>
-              <span>{profile?.role === "seller" ? "Tus ventas, señas y agenda personal." : "Ventas, señas y eventos en un solo lugar."}</span>
+              <h1>{profile?.role === "seller" ? "Mis ventas y agenda." : "Todo bajo control."}</h1>
+              <span>{profile?.role === "seller" ? "Tus ventas personales y el calendario general del equipo." : "Ventas, señas y eventos en un solo lugar."}</span>
             </div>
             <div>
               {profile?.role === "owner" && (
@@ -370,7 +374,7 @@ export default function App() {
             />
           </section>
           <section className="content-grid">
-            <CalendarAgenda events={filteredEvents} month={calendarMonth} selectedDay={calendarDay} onMonthChange={(month) => { setCalendarMonth(month); setCalendarDay(""); }} onSelectDay={setCalendarDay} canEdit={canEditEvents} onPayment={setPaymentEvent} onAction={setActionEvent} />
+            <CalendarAgenda events={filteredEvents} month={calendarMonth} selectedDay={calendarDay} onMonthChange={(month) => { setCalendarMonth(month); setCalendarDay(""); }} onSelectDay={setCalendarDay} profile={profile} />
             <div className="side">
               <ReminderPanel events={next24Hours} />
               {profile?.role === "owner" && <><NotificationPanel notifications={notifications} onRead={readNotifications} /><article className="result"><span>Resultado mensual</span><strong>{ars(totals.collected - monthlyExpenses)}</strong><small>Cobrado menos gastos cargados del mes.</small></article></>}
@@ -734,9 +738,9 @@ function Metric({ label, value, detail, tone }) {
   );
 }
 
-function CalendarAgenda({ events, month, selectedDay, onMonthChange, onSelectDay, canEdit, onPayment, onAction }) {
+function CalendarAgenda({ events, month, selectedDay, onMonthChange, onSelectDay, profile }) {
   const [year, monthNumber] = month.split("-").map(Number); const start = new Date(year, monthNumber - 1, 1).getDay(); const days = new Date(year, monthNumber, 0).getDate();
   const byDay = events.reduce((all, event) => { const date = event.scheduledAt?.slice(0, 10); if (date?.startsWith(month)) (all[date] ??= []).push(event); return all; }, {});
   const selected = selectedDay ? byDay[selectedDay] ?? [] : [];
-  return <article className="agenda calendar-agenda"><div className="section-head"><div><h2>Agenda y calendario</h2><span>{selectedDay ? `Eventos del ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString("es-AR")}` : "Elegí un día para ver el detalle"}</span></div><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} /></div><div className="calendar-week">{"D L M M J V S".split(" ").map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div><div className="calendar-days">{Array.from({ length: start }, (_, index) => <i key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = `${month}-${String(index + 1).padStart(2, "0")}`; const count = byDay[date]?.length ?? 0; return <button type="button" className={selectedDay === date ? "selected" : ""} key={date} onClick={() => onSelectDay(date)}>{index + 1}{count > 0 && <b>{count}</b>}</button>; })}</div>{selectedDay && <div className="event-list">{selected.map((item) => <div className="event" key={item.id}><time>{item.time}</time><i/><div className="event-main"><b>{item.client}</b><span>{item.packageName}{item.serviceHours ? ` · ${item.serviceHours} ${item.serviceHours === 1 ? "hora" : "horas"}` : ""}</span></div><div className="event-meta"><b>{ars(item.total)}</b><em className={item.status}>{eventStatusLabel[item.status]}</em><a className="link-button" href={`#evento=${item.id}`} target="_blank" rel="noreferrer">Ver más</a></div></div>)}{selected.length === 0 && <p className="empty">No hay eventos para este día.</p>}</div>}</article>;
+  return <article className="agenda calendar-agenda"><div className="section-head"><div><h2>Agenda y calendario</h2><span>{selectedDay ? `Eventos del ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString("es-AR")}` : "Elegí un día para ver el detalle"}</span></div><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} /></div><div className="calendar-week">{"D L M M J V S".split(" ").map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div><div className="calendar-days">{Array.from({ length: start }, (_, index) => <i key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = `${month}-${String(index + 1).padStart(2, "0")}`; const count = byDay[date]?.length ?? 0; return <button type="button" className={selectedDay === date ? "selected" : ""} key={date} onClick={() => onSelectDay(date)}>{index + 1}{count > 0 && <b>{count}</b>}</button>; })}</div>{selectedDay && <div className="event-list">{selected.map((item) => { const showOwnEvent = profile?.role === "owner" || item.isOwn || item.createdBy === profile?.id; return <div className="event" key={item.id}><time>{item.time}</time><i/><div className="event-main"><b>{item.client}</b><span>{item.packageName}{item.serviceHours ? ` · ${item.serviceHours} ${item.serviceHours === 1 ? "hora" : "horas"}` : ""}</span></div><div className="event-meta">{profile?.role === "owner" && <b>{ars(item.total)}</b>}<em className={item.status}>{eventStatusLabel[item.status]}</em>{showOwnEvent && <a className="link-button" href={`#evento=${item.id}`} target="_blank" rel="noreferrer">Ver más</a>}</div></div>; })}{selected.length === 0 && <p className="empty">No hay eventos para este día.</p>}</div>}</article>;
 }

@@ -6,8 +6,23 @@ export async function listEvents() {
   return data.map((event) => {
     const payments = event.payments.map((payment) => ({ amount: Number(payment.amount), paidAt: payment.paid_at }));
     const historicalSeller = event.details?.match(/Vendedora histórica:\s*([^·]+)/i)?.[1]?.trim() ?? null;
-    return { id: event.id, createdBy: event.created_by, scheduledAt: event.scheduled_at, time: event.scheduled_at ? new Date(event.scheduled_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "Sin hora", client: event.clients?.full_name ?? "Sin cliente", phone: event.clients?.phone ?? null, email: event.clients?.email ?? null, packageName: event.package_snapshot?.name ?? "Servicio a definir", location: event.location, locality: event.locality, eventType: event.event_type, serviceHours: event.service_hours == null ? null : Number(event.service_hours), travelCost: event.travel_cost == null ? null : Number(event.travel_cost), routeDistanceMeters: event.route_distance_meters, routeDurationSeconds: event.route_duration_seconds, routeTollAmount: event.route_toll_amount == null ? null : Number(event.route_toll_amount), routeTollCurrency: event.route_toll_currency, routeOrigin: event.route_origin, details: event.details, historicalSeller, total: Number(event.sale_total), payments, paid: payments.reduce((sum, payment) => sum + payment.amount, 0), status: event.status };
+    return { id: event.id, createdBy: event.created_by, scheduledAt: event.scheduled_at, time: event.scheduled_at ? new Date(event.scheduled_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "Sin hora", client: event.clients?.full_name ?? "Evento ocupado", phone: event.clients?.phone ?? null, email: event.clients?.email ?? null, packageName: event.package_snapshot?.name ?? "Servicio a definir", location: event.location, locality: event.locality, eventType: event.event_type, serviceHours: event.service_hours == null ? null : Number(event.service_hours), travelCost: event.travel_cost == null ? null : Number(event.travel_cost), routeDistanceMeters: event.route_distance_meters, routeDurationSeconds: event.route_duration_seconds, routeTollAmount: event.route_toll_amount == null ? null : Number(event.route_toll_amount), routeTollCurrency: event.route_toll_currency, routeOrigin: event.route_origin, details: event.details, historicalSeller, total: Number(event.sale_total), payments, paid: payments.reduce((sum, payment) => sum + payment.amount, 0), status: event.status };
   });
+}
+
+export async function listSharedCalendarEvents() {
+  const { data, error } = await supabase.rpc("shared_calendar_entries");
+  if (error) throw error;
+  return data.map((event) => ({
+    id: event.event_id,
+    scheduledAt: event.scheduled_at,
+    time: event.scheduled_at ? new Date(event.scheduled_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "Sin hora",
+    client: event.title,
+    packageName: event.service,
+    serviceHours: event.service_hours == null ? null : Number(event.service_hours),
+    status: event.status,
+    isOwn: event.is_own,
+  }));
 }
 
 export async function createEvent({ clientName, phone, email, location, locality, eventType, serviceHours, travelCost, route, details, packageInfo, total, date, time, userId }) {
