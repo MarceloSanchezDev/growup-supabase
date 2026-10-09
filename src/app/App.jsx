@@ -78,18 +78,22 @@ export default function App() {
       })
       .catch((error) => setMessage(error.message));
   }, [session]);
+  const dashboardEvents = useMemo(
+    () => profile?.role === "seller" ? events.filter((event) => event.createdBy === profile.id) : events,
+    [events, profile],
+  );
   const filteredEvents = useMemo(
     () =>
-      events.filter((event) =>
+      dashboardEvents.filter((event) =>
         `${event.client} ${event.packageName}`
           .toLowerCase()
           .includes(search.toLowerCase()),
       ),
-    [events, search],
+    [dashboardEvents, search],
   );
   const totals = useMemo(
     () =>
-      events
+      dashboardEvents
         .filter((event) => !["cancelled", "rescheduled"].includes(event.status))
         .reduce(
           (result, event) => ({
@@ -98,17 +102,17 @@ export default function App() {
           }),
           { sold: 0, collected: 0 },
         ),
-    [events],
+    [dashboardEvents],
   );
   const currentMonth = new Date().toISOString().slice(0, 7);
   const next24Hours = useMemo(() => {
     const now = new Date();
     const limit = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    return events.filter((item) => {
+    return dashboardEvents.filter((item) => {
       const scheduledAt = new Date(item.scheduledAt);
       return !["cancelled", "rescheduled", "completed"].includes(item.status) && scheduledAt >= now && scheduledAt <= limit;
     });
-  }, [events]);
+  }, [dashboardEvents]);
   const monthlyExpenses = useMemo(
     () =>
       expenses
@@ -294,9 +298,9 @@ export default function App() {
         <main>
           <section className="heading">
             <div>
-              <p>Panel de eventos</p>
-              <h1>Todo bajo control.</h1>
-              <span>Ventas, señas y eventos en un solo lugar.</span>
+              <p>{profile?.role === "seller" ? "Mi panel de ventas" : "Panel de eventos"}</p>
+              <h1>{profile?.role === "seller" ? "Mis eventos." : "Todo bajo control."}</h1>
+              <span>{profile?.role === "seller" ? "Tus ventas, señas y agenda personal." : "Ventas, señas y eventos en un solo lugar."}</span>
             </div>
             <div>
               {profile?.role === "owner" && (
@@ -337,11 +341,6 @@ export default function App() {
               )}
             </div>
           </section>
-          {profile?.role === "seller" && (
-            <button className="link-button" onClick={claimOwner}>
-              Activar esta primera cuenta como dueña
-            </button>
-          )}
           {showEventForm && (
             <EventForm
               packages={packages}
@@ -352,21 +351,21 @@ export default function App() {
           )}
           <section className="metrics">
             <Metric
-              label="Vendido"
+              label={profile?.role === "seller" ? "Mi vendido" : "Vendido"}
               value={ars(totals.sold)}
-              detail="Eventos registrados"
+              detail={profile?.role === "seller" ? "Mis eventos registrados" : "Eventos registrados"}
               tone="purple"
             />
             <Metric
-              label="Cobrado"
+              label={profile?.role === "seller" ? "Mi cobrado" : "Cobrado"}
               value={ars(totals.collected)}
-              detail="Señas y pagos cargados"
+              detail={profile?.role === "seller" ? "Pagos de mis eventos" : "Señas y pagos cargados"}
               tone="pink"
             />
             <Metric
-              label="Pendiente"
+              label={profile?.role === "seller" ? "Mi pendiente" : "Pendiente"}
               value={ars(totals.sold - totals.collected)}
-              detail="Saldos por cobrar"
+              detail={profile?.role === "seller" ? "Saldos de mis eventos" : "Saldos por cobrar"}
               tone="amber"
             />
           </section>
@@ -374,12 +373,8 @@ export default function App() {
             <CalendarAgenda events={filteredEvents} month={calendarMonth} selectedDay={calendarDay} onMonthChange={(month) => { setCalendarMonth(month); setCalendarDay(""); }} onSelectDay={setCalendarDay} canEdit={canEditEvents} onPayment={setPaymentEvent} onAction={setActionEvent} />
             <div className="side">
               <ReminderPanel events={next24Hours} />
-              <NotificationPanel notifications={notifications} onRead={readNotifications} />
-              <article className="result">
-                <span>Resultado mensual</span>
-                <strong>{ars(totals.collected - monthlyExpenses)}</strong>
-                <small>Cobrado menos gastos cargados del mes.</small>
-              </article>
+              {profile?.role === "owner" && <><NotificationPanel notifications={notifications} onRead={readNotifications} /><article className="result"><span>Resultado mensual</span><strong>{ars(totals.collected - monthlyExpenses)}</strong><small>Cobrado menos gastos cargados del mes.</small></article></>}
+              {profile?.role === "seller" && <article className="review"><h2>Mi agenda</h2><p><strong>{dashboardEvents.length}</strong><br />eventos propios disponibles en el calendario.</p></article>}
               <article className="review">
                 <h2>Paquetes activos</h2>
                 <p>
