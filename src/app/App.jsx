@@ -21,6 +21,7 @@ import {
 import { listTeam, updateMemberRole } from "../modules/team/teamService";
 import ImportScreen from "../modules/imports/ImportScreen";
 import ReportsScreen from "../modules/reports/ReportsScreen";
+import { calculateRoute } from "../modules/maps/routeService";
 import {
   listNotifications,
   markNotificationsRead,
@@ -129,6 +130,8 @@ export default function App() {
         locality: data.get("locality"),
         eventType: data.get("eventType"),
         serviceHours: data.get("serviceHours") ? Number(data.get("serviceHours")) : null,
+        travelCost: Number(data.get("travelCost")),
+        route: data.get("routeData") ? JSON.parse(data.get("routeData")) : null,
         details: data.get("details"),
         packageInfo,
         total: packageInfo?.base_price ?? Number(data.get("total")),
@@ -338,6 +341,7 @@ export default function App() {
           {showEventForm && (
             <EventForm
               packages={packages}
+              accessToken={session.access_token}
               onClose={() => setShowEventForm(false)}
               onSubmit={createInquiry}
             />
@@ -497,7 +501,33 @@ function NotificationPanel({ notifications, onRead }) {
   );
 }
 
-function EventForm({ packages, onClose, onSubmit }) {
+function EventForm({ packages, accessToken, onClose, onSubmit }) {
+  const [location, setLocation] = useState("");
+  const [locality, setLocality] = useState("");
+  const [travelCost, setTravelCost] = useState("90300");
+  const [route, setRoute] = useState(null);
+  const [routeMessage, setRouteMessage] = useState("");
+  const [calculating, setCalculating] = useState(false);
+  async function calculateTravel() {
+    const destination = [location, locality].filter(Boolean).join(", ");
+    if (!destination) {
+      setRouteMessage("Ingresá al menos el lugar o la localidad para calcular la ruta.");
+      return;
+    }
+    setCalculating(true);
+    setRouteMessage("");
+    try {
+      const result = await calculateRoute(destination, accessToken);
+      setRoute(result);
+    } catch (error) {
+      setRoute(null);
+      setRouteMessage(error.message);
+    } finally {
+      setCalculating(false);
+    }
+  }
+  const kilometers = route ? (route.distanceMeters / 1000).toLocaleString("es-AR", { maximumFractionDigits: 1 }) : null;
+  const minutes = route ? Math.round(route.durationSeconds / 60) : null;
   return (
     <section className="inline-event-form">
       <div className="inline-form-heading">
@@ -509,15 +539,23 @@ function EventForm({ packages, onClose, onSubmit }) {
           <label>Cliente<input name="client" required /></label>
           <label>Teléfono<input name="phone" type="tel" /></label>
           <label>Correo<input name="email" type="email" /></label>
-          <label>Lugar<input name="location" placeholder="Dirección o salón" /></label>
-          <label>Localidad<input name="locality" /></label>
+          <label>Lugar<input name="location" value={location} onChange={(event) => { setLocation(event.target.value); setRoute(null); }} placeholder="Dirección o salón" /></label>
+          <label>Localidad<input name="locality" value={locality} onChange={(event) => { setLocality(event.target.value); setRoute(null); }} /></label>
           <label>Tipo de evento<input name="eventType" placeholder="Ej. cumpleaños, boda o 15 años" /></label>
           <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" placeholder="Ej. 3" /></label>
+          <label>Costo interno de viaje<input name="travelCost" type="number" min="0" step="1" value={travelCost} onChange={(event) => setTravelCost(event.target.value)} required /></label>
           <label>Paquete<select name="packageId" required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
           <label>Fecha<input name="date" type="date" required /></label>
           <label>Horario<input name="time" type="time" required /></label>
           <label className="form-wide">Detalle interno<input name="details" placeholder="Observaciones del evento" /></label>
         </div>
+        <section className="route-calculator">
+          <div><strong>Ruta desde UNAHUR</strong><span>Distancia y tiempo estimados para el traslado.</span></div>
+          <button className="link-button" type="button" onClick={calculateTravel} disabled={calculating}>{calculating ? "Calculando…" : "Calcular ruta"}</button>
+          {route && <p><strong>{kilometers} km · {minutes} min</strong>{route.toll ? ` · Peajes estimados: ${route.toll.currency || ""} ${route.toll.amount.toLocaleString("es-AR")}` : " · Sin peaje informado"}<small>Powered by Google</small></p>}
+          {routeMessage && <p className="route-error">{routeMessage}</p>}
+          <input type="hidden" name="routeData" value={route ? JSON.stringify(route) : ""} />
+        </section>
         <div className="actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary" type="submit">Crear consulta</button></div>
       </form>
     </section>
@@ -701,5 +739,5 @@ function CalendarAgenda({ events, month, selectedDay, onMonthChange, onSelectDay
   const [year, monthNumber] = month.split("-").map(Number); const start = new Date(year, monthNumber - 1, 1).getDay(); const days = new Date(year, monthNumber, 0).getDate();
   const byDay = events.reduce((all, event) => { const date = event.scheduledAt?.slice(0, 10); if (date?.startsWith(month)) (all[date] ??= []).push(event); return all; }, {});
   const selected = selectedDay ? byDay[selectedDay] ?? [] : [];
-  return <article className="agenda calendar-agenda"><div className="section-head"><div><h2>Agenda y calendario</h2><span>{selectedDay ? `Eventos del ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString("es-AR")}` : "Elegí un día para ver el detalle"}</span></div><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} /></div><div className="calendar-week">{"D L M M J V S".split(" ").map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div><div className="calendar-days">{Array.from({ length: start }, (_, index) => <i key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = `${month}-${String(index + 1).padStart(2, "0")}`; const count = byDay[date]?.length ?? 0; return <button type="button" className={selectedDay === date ? "selected" : ""} key={date} onClick={() => onSelectDay(date)}>{index + 1}{count > 0 && <b>{count}</b>}</button>; })}</div>{selectedDay && <div className="event-list">{selected.map((item) => { const address = [item.location, item.locality].filter(Boolean).join(", "); return <div className="event" key={item.id}><time>{item.time}</time><i/><div className="event-main"><b>{item.client}</b><span>{item.packageName}{item.serviceHours ? ` · ${item.serviceHours} ${item.serviceHours === 1 ? "hora" : "horas"}` : ""}</span>{address && <small>{address}</small>}</div><div className="event-meta"><b>{ars(item.total)}</b><em className={item.status}>{eventStatusLabel[item.status]}</em>{address && <a className="link-button map-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`} target="_blank" rel="noreferrer">Ver en Maps ↗</a>}{canEdit && <><button className="link-button" onClick={() => onPayment(item)}>{item.paid ? "Registrar pago" : "Registrar seña"}</button><button className="link-button" onClick={() => onAction({ type: "reschedule", event: item })}>Reprogramar</button><button className="link-button" onClick={() => onAction({ type: "cancel", event: item })}>Cancelar</button></>}</div></div>; })}{selected.length === 0 && <p className="empty">No hay eventos para este día.</p>}</div>}</article>;
+  return <article className="agenda calendar-agenda"><div className="section-head"><div><h2>Agenda y calendario</h2><span>{selectedDay ? `Eventos del ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString("es-AR")}` : "Elegí un día para ver el detalle"}</span></div><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} /></div><div className="calendar-week">{"D L M M J V S".split(" ").map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div><div className="calendar-days">{Array.from({ length: start }, (_, index) => <i key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = `${month}-${String(index + 1).padStart(2, "0")}`; const count = byDay[date]?.length ?? 0; return <button type="button" className={selectedDay === date ? "selected" : ""} key={date} onClick={() => onSelectDay(date)}>{index + 1}{count > 0 && <b>{count}</b>}</button>; })}</div>{selectedDay && <div className="event-list">{selected.map((item) => { const address = [item.location, item.locality].filter(Boolean).join(", "); const routeInfo = [item.routeDistanceMeters != null && `${(item.routeDistanceMeters / 1000).toLocaleString("es-AR", { maximumFractionDigits: 1 })} km desde UNAHUR`, item.travelCost != null && `costo interno ${ars(item.travelCost)}`].filter(Boolean).join(" · "); return <div className="event" key={item.id}><time>{item.time}</time><i/><div className="event-main"><b>{item.client}</b><span>{item.packageName}{item.serviceHours ? ` · ${item.serviceHours} ${item.serviceHours === 1 ? "hora" : "horas"}` : ""}</span>{address && <small>{address}</small>}{routeInfo && <small>{routeInfo}</small>}</div><div className="event-meta"><b>{ars(item.total)}</b><em className={item.status}>{eventStatusLabel[item.status]}</em>{address && <a className="link-button map-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`} target="_blank" rel="noreferrer">Ver en Maps ↗</a>}{canEdit && <><button className="link-button" onClick={() => onPayment(item)}>{item.paid ? "Registrar pago" : "Registrar seña"}</button><button className="link-button" onClick={() => onAction({ type: "reschedule", event: item })}>Reprogramar</button><button className="link-button" onClick={() => onAction({ type: "cancel", event: item })}>Cancelar</button></>}</div></div>; })}{selected.length === 0 && <p className="empty">No hay eventos para este día.</p>}</div>}</article>;
 }

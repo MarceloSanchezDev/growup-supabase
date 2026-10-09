@@ -5,8 +5,8 @@ function csvValue(value) {
 }
 
 export function downloadEventsCsv(events) {
-  const header = ["Cliente", "Fecha y hora", "Servicio", "Horas de servicio", "Total", "Cobrado", "Saldo", "Estado"];
-  const rows = events.map((event) => [event.client, event.scheduledAt ? new Date(event.scheduledAt).toLocaleString("es-AR") : "", event.packageName, event.serviceHours ?? "", event.total, event.paid, event.total - event.paid, eventStatusLabel[event.status] ?? event.status]);
+  const header = ["Cliente", "Fecha y hora", "Servicio", "Horas de servicio", "Costo viaje interno", "Distancia desde UNAHUR (km)", "Total", "Cobrado", "Saldo", "Estado"];
+  const rows = events.map((event) => [event.client, event.scheduledAt ? new Date(event.scheduledAt).toLocaleString("es-AR") : "", event.packageName, event.serviceHours ?? "", event.travelCost ?? "", event.routeDistanceMeters == null ? "" : event.routeDistanceMeters / 1000, event.total, event.paid, event.total - event.paid, eventStatusLabel[event.status] ?? event.status]);
   const csv = [header, ...rows].map((row) => row.map(csvValue).join(";")).join("\n");
   const url = URL.createObjectURL(new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a"); link.href = url; link.download = `growup-eventos-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
