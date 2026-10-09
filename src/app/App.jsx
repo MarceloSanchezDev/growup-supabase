@@ -512,8 +512,8 @@ function EventForm({ packages, accessToken, onClose, onSubmit }) {
   const [route, setRoute] = useState(null);
   const [routeMessage, setRouteMessage] = useState("");
   const [calculating, setCalculating] = useState(false);
-  async function calculateTravel() {
-    const destination = [location, locality].filter(Boolean).join(", ");
+  async function calculateTravel(locationValue = location, localityValue = locality) {
+    const destination = [locationValue, localityValue].filter(Boolean).join(", ");
     if (!destination) {
       setRouteMessage("Ingresá al menos el lugar o la localidad para calcular la ruta.");
       return;
@@ -543,8 +543,8 @@ function EventForm({ packages, accessToken, onClose, onSubmit }) {
           <label>Cliente<input name="client" required /></label>
           <label>Teléfono<input name="phone" type="tel" /></label>
           <label>Correo<input name="email" type="email" /></label>
-          <label>Lugar<input name="location" value={location} onChange={(event) => { setLocation(event.target.value); setRoute(null); }} placeholder="Dirección o salón" /></label>
-          <label>Localidad<input name="locality" value={locality} onChange={(event) => { setLocality(event.target.value); setRoute(null); }} /></label>
+          <label>Lugar<input name="location" value={location} onChange={(event) => { setLocation(event.target.value); setRoute(null); }} onBlur={(event) => calculateTravel(event.target.value, locality)} placeholder="Dirección o salón" /></label>
+          <label>Localidad<input name="locality" value={locality} onChange={(event) => { setLocality(event.target.value); setRoute(null); }} onBlur={(event) => calculateTravel(location, event.target.value)} /></label>
           <label>Tipo de evento<input name="eventType" placeholder="Ej. cumpleaños, boda o 15 años" /></label>
           <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" placeholder="Ej. 3" /></label>
           <label>Costo interno de viaje<input name="travelCost" type="number" min="0" step="1" value={travelCost} onChange={(event) => setTravelCost(event.target.value)} required /></label>
@@ -554,8 +554,8 @@ function EventForm({ packages, accessToken, onClose, onSubmit }) {
           <label className="form-wide">Detalle interno<input name="details" placeholder="Observaciones del evento" /></label>
         </div>
         <section className="route-calculator">
-          <div><strong>Ruta desde UNAHUR</strong><span>Distancia y tiempo estimados para el traslado.</span></div>
-          <button className="link-button" type="button" onClick={calculateTravel} disabled={calculating}>{calculating ? "Calculando…" : "Calcular ruta"}</button>
+          <div><strong>Ruta desde UNAHUR</strong><span>Se calcula al terminar de cargar el lugar o la localidad.</span></div>
+          <button className="link-button" type="button" onClick={() => calculateTravel()} disabled={calculating}>{calculating ? "Calculando…" : "Recalcular ruta"}</button>
           {route && <p><strong>{kilometers} km · {minutes} min</strong>{route.toll ? ` · Peajes estimados: ${route.toll.currency || ""} ${route.toll.amount.toLocaleString("es-AR")}` : " · Sin peaje informado"}<small>Powered by Google</small></p>}
           {routeMessage && <p className="route-error">{routeMessage}</p>}
           <input type="hidden" name="routeData" value={route ? JSON.stringify(route) : ""} />
