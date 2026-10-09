@@ -13,15 +13,6 @@ async function hasAuthenticatedUser(request) {
   return result.ok;
 }
 
-function toll(route) {
-  const price = route.travelAdvisory?.tollInfo?.estimatedPrice?.[0];
-  if (!price) return null;
-  return {
-    amount: Number(price.units ?? 0) + Number(price.nanos ?? 0) / 1_000_000_000,
-    currency: price.currencyCode ?? null,
-  };
-}
-
 export async function POST(request) {
   if (!(await hasAuthenticatedUser(request))) return response({ error: "Tu sesión no es válida." }, 401);
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
@@ -35,7 +26,7 @@ export async function POST(request) {
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.travelAdvisory.tollInfo",
+      "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
     },
     body: JSON.stringify({
       origin: { address: origin },
@@ -44,7 +35,6 @@ export async function POST(request) {
       languageCode: "es-AR",
       regionCode: "AR",
       units: "METRIC",
-      extraComputations: ["TOLLS"],
     }),
   });
   const payload = await googleResponse.json().catch(() => ({}));
@@ -54,6 +44,6 @@ export async function POST(request) {
     origin,
     distanceMeters: route.distanceMeters,
     durationSeconds: Number(String(route.duration ?? "0s").replace("s", "")),
-    toll: toll(route),
+    toll: null,
   });
 }

@@ -10,4 +10,6 @@ La aplicación calcula distancia y duración desde la sede Origone de UNAHUR (Tt
 
 La clave nunca debe agregarse al repositorio ni a variables `VITE_`. La función `/api/route` la usa del lado del servidor y solo admite solicitudes de usuarios autenticados.
 
-El cálculo devuelve distancia, tiempo y peajes estimados cuando Google disponga de ese dato. El costo interno de viaje queda editable y se precarga en $90.300; no se calcula automáticamente a partir de los peajes.
+El cálculo pide solamente distancia y tiempo, sin consultas de peajes ni tráfico, para usar la modalidad más económica. El costo interno de viaje queda editable y se precarga en $90.300. La ruta se consulta únicamente cuando la persona presiona “Calcular ruta”.
+
+En Google Cloud, configurá además un límite diario de solicitudes y un presupuesto con alertas para Routes API.
