@@ -31,6 +31,19 @@ import {
 import { ars } from "../shared/money";
 import { isSupabaseConfigured, supabase } from "../supabase/client";
 
+function mondayValue(date = new Date()) {
+  const value = new Date(date);
+  value.setHours(12, 0, 0, 0);
+  value.setDate(value.getDate() - ((value.getDay() + 6) % 7));
+  return value.toISOString().slice(0, 10);
+}
+
+function shiftWeek(value, amount) {
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + amount * 7);
+  return date.toISOString().slice(0, 10);
+}
+
 export default function App() {
   const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(null);
@@ -43,6 +56,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(new Date().toISOString().slice(0, 7));
   const [calendarDay, setCalendarDay] = useState("");
+  const [weekStart, setWeekStart] = useState(() => mondayValue());
   const [showEventForm, setShowEventForm] = useState(false);
   const [showPackageForm, setShowPackageForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -124,6 +138,15 @@ export default function App() {
         .reduce((sum, expense) => sum + expense.amount, 0),
     [expenses, currentMonth],
   );
+  const weeklyEvents = useMemo(() => {
+    const start = new Date(`${weekStart}T00:00:00`);
+    const end = new Date(`${weekStart}T00:00:00`);
+    end.setDate(end.getDate() + 7);
+    return events.filter((item) => {
+      const date = new Date(item.scheduledAt);
+      return date >= start && date < end;
+    });
+  }, [events, weekStart]);
   async function createInquiry(event) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -373,6 +396,7 @@ export default function App() {
               tone="amber"
             />
           </section>
+          {profile?.role === "owner" && <WeeklyEventTable events={weeklyEvents} weekStart={weekStart} team={team} onWeekChange={setWeekStart} />}
           <section className="content-grid">
             <CalendarAgenda events={filteredEvents} month={calendarMonth} selectedDay={calendarDay} onMonthChange={(month) => { setCalendarMonth(month); setCalendarDay(""); }} onSelectDay={setCalendarDay} profile={profile} />
             <div className="side">
@@ -736,6 +760,12 @@ function Metric({ label, value, detail, tone }) {
       <small>{detail}</small>
     </article>
   );
+}
+
+function WeeklyEventTable({ events, weekStart, team, onWeekChange }) {
+  const weekEnd = shiftWeek(weekStart, 1);
+  const seller = (event) => event.historicalSeller || team.find((member) => member.id === event.createdBy)?.full_name || "Sin asignar";
+  return <section className="weekly-table"><div className="weekly-table-head"><div><p>Vista operativa</p><h2>Planilla semanal</h2><span>{new Date(`${weekStart}T12:00:00`).toLocaleDateString("es-AR")} al {new Date(`${weekEnd}T12:00:00`).toLocaleDateString("es-AR")}</span></div><div className="week-controls"><button className="link-button" onClick={() => onWeekChange(shiftWeek(weekStart, -1))}>← Semana</button><input aria-label="Semana" type="date" value={weekStart} onChange={(event) => onWeekChange(mondayValue(new Date(`${event.target.value}T12:00:00`)))} /><button className="link-button" onClick={() => onWeekChange(shiftWeek(weekStart, 1))}>Semana →</button></div></div><div className="weekly-table-scroll"><table><thead><tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Servicio</th><th>Lugar</th><th>Vendedora</th><th>Total</th><th>Cobrado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead><tbody>{events.length ? events.map((event) => <tr key={event.id}><td>{event.scheduledAt ? new Date(event.scheduledAt).toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit" }) : "Sin fecha"}</td><td>{event.time}</td><td><strong>{event.client}</strong>{event.phone && <small>{event.phone}</small>}</td><td>{event.packageName}{event.serviceHours && <small>{event.serviceHours} h</small>}</td><td>{[event.location, event.locality].filter(Boolean).join(" · ") || "—"}</td><td>{seller(event)}</td><td>{ars(event.total)}</td><td>{ars(event.paid)}</td><td>{ars(Math.max(event.total - event.paid, 0))}</td><td><em className={event.status}>{eventStatusLabel[event.status]}</em></td><td><a className="link-button" href={`#evento=${event.id}`} target="_blank" rel="noreferrer">Ver más</a></td></tr>) : <tr><td colSpan="11" className="empty">No hay eventos cargados para esta semana.</td></tr>}</tbody></table></div></section>;
 }
 
 function CalendarAgenda({ events, month, selectedDay, onMonthChange, onSelectDay, profile }) {
