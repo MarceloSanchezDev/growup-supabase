@@ -150,9 +150,15 @@ export default function App() {
   async function createInquiry(event) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const packageInfo = packages.find(
-      (item) => item.id === data.get("packageId"),
-    );
+    const serviceBlocks = data.getAll("serviceTime").map((time, index) => {
+      const packageInfo = packages.find((item) => item.id === data.getAll("servicePackageId")[index]);
+      return {
+        time,
+        serviceHours: data.getAll("serviceHours")[index] ? Number(data.getAll("serviceHours")[index]) : null,
+        notes: data.getAll("serviceNote")[index],
+        packageInfo,
+      };
+    });
     try {
       await createEvent({
         clientName: data.get("client"),
@@ -161,14 +167,12 @@ export default function App() {
         location: data.get("location"),
         locality: data.get("locality"),
         eventType: data.get("eventType"),
-        serviceHours: data.get("serviceHours") ? Number(data.get("serviceHours")) : null,
         travelCost: Number(data.get("travelCost")),
         route: data.get("routeData") ? JSON.parse(data.get("routeData")) : null,
         details: data.get("details"),
-        packageInfo,
-        total: packageInfo?.base_price ?? Number(data.get("total")),
+        serviceBlocks,
+        total: serviceBlocks.reduce((sum, block) => sum + Number(block.packageInfo?.base_price ?? 0), 0),
         date: data.get("date"),
-        time: data.get("time"),
         userId: session.user.id,
       });
       await refreshEvents();
@@ -535,6 +539,8 @@ function EventForm({ packages, accessToken, onClose, onSubmit }) {
   const [route, setRoute] = useState(null);
   const [routeMessage, setRouteMessage] = useState("");
   const [calculating, setCalculating] = useState(false);
+  const [serviceBlocks, setServiceBlocks] = useState([{ key: 1 }]);
+  const [nextBlockKey, setNextBlockKey] = useState(2);
   async function calculateTravel(locationValue = location, localityValue = locality) {
     const destination = [locationValue, localityValue].filter(Boolean).join(", ");
     if (!destination) {
@@ -555,6 +561,11 @@ function EventForm({ packages, accessToken, onClose, onSubmit }) {
   }
   const kilometers = route ? (route.distanceMeters / 1000).toLocaleString("es-AR", { maximumFractionDigits: 1 }) : null;
   const minutes = route ? Math.round(route.durationSeconds / 60) : null;
+  const addServiceBlock = () => {
+    setServiceBlocks((blocks) => [...blocks, { key: nextBlockKey }]);
+    setNextBlockKey((key) => key + 1);
+  };
+  const removeServiceBlock = (key) => setServiceBlocks((blocks) => blocks.length > 1 ? blocks.filter((block) => block.key !== key) : blocks);
   return (
     <section className="inline-event-form">
       <div className="inline-form-heading">
@@ -569,13 +580,21 @@ function EventForm({ packages, accessToken, onClose, onSubmit }) {
           <label>Lugar<input name="location" value={location} onChange={(event) => { setLocation(event.target.value); setRoute(null); }} placeholder="Dirección o salón" /></label>
           <label>Localidad<input name="locality" value={locality} onChange={(event) => { setLocality(event.target.value); setRoute(null); }} /></label>
           <label>Tipo de evento<input name="eventType" placeholder="Ej. cumpleaños, boda o 15 años" /></label>
-          <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" placeholder="Ej. 3" /></label>
           <label>Costo interno de viaje<input name="travelCost" type="number" min="0" step="1" value={travelCost} onChange={(event) => setTravelCost(event.target.value)} required /></label>
-          <label>Paquete<select name="packageId" required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
           <label>Fecha<input name="date" type="date" required /></label>
-          <label>Horario<input name="time" type="time" required /></label>
           <label className="form-wide">Detalle interno<input name="details" placeholder="Observaciones del evento" /></label>
         </div>
+        <section className="service-blocks">
+          <div className="service-blocks-heading"><div><strong>Servicios y horarios</strong><span>Todos pertenecen a esta misma reserva y se realizan el mismo día.</span></div><button className="link-button" type="button" onClick={addServiceBlock}>+ Agregar horario</button></div>
+          {serviceBlocks.map((block, index) => <div className="service-block" key={block.key}>
+            <b>Servicio {index + 1}</b>
+            <label>Horario<input name="serviceTime" type="time" required /></label>
+            <label>Paquete o servicio<select name="servicePackageId" required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
+            <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" placeholder="Ej. 3" /></label>
+            <label>Nota operativa<input name="serviceNote" placeholder="Ej. armado, segundo turno" /></label>
+            {serviceBlocks.length > 1 && <button className="remove-service" type="button" onClick={() => removeServiceBlock(block.key)} aria-label={`Quitar servicio ${index + 1}`}>×</button>}
+          </div>)}
+        </section>
         <section className="route-calculator">
           <div><strong>Ruta desde UNAHUR</strong><span>Calculala solo cuando necesites cotizar el traslado.</span></div>
           <button className="link-button" type="button" onClick={() => calculateTravel()} disabled={calculating}>{calculating ? "Calculando…" : route ? "Recalcular ruta" : "Calcular ruta"}</button>

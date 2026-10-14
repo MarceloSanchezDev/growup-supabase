@@ -25,12 +25,16 @@ export async function listSharedCalendarEvents() {
   }));
 }
 
-export async function createEvent({ clientName, phone, email, location, locality, eventType, serviceHours, travelCost, route, details, packageInfo, total, date, time, userId }) {
+export async function createEvent({ clientName, phone, email, location, locality, eventType, travelCost, route, details, serviceBlocks, total, date, userId }) {
   const { data: client, error: clientError } = await supabase.from("clients").insert({ full_name: clientName, phone: phone || null, email: email || null }).select("id").single();
   if (clientError) throw clientError;
-  const scheduledAt = new Date(`${date}T${time}:00`).toISOString();
-  const { error } = await supabase.from("events").insert({ client_id: client.id, package_id: packageInfo?.id ?? null, scheduled_at: scheduledAt, sale_total: total, location: location || null, locality: locality || null, event_type: eventType || null, service_hours: serviceHours || null, travel_cost: travelCost, route_distance_meters: route?.distanceMeters ?? null, route_duration_seconds: route?.durationSeconds ?? null, route_toll_amount: route?.toll?.amount ?? null, route_toll_currency: route?.toll?.currency ?? null, route_origin: route?.origin ?? null, details: details || null, package_snapshot: { name: packageInfo?.name ?? "Servicio personalizado", base_price: packageInfo?.base_price ?? total }, created_by: userId });
+  const primaryBlock = serviceBlocks[0];
+  const scheduledAt = new Date(`${date}T${primaryBlock.time}:00`).toISOString();
+  const reservationName = serviceBlocks.length === 1 ? primaryBlock.packageInfo?.name : `Reserva con ${serviceBlocks.length} servicios`;
+  const { data: createdEvent, error } = await supabase.from("events").insert({ client_id: client.id, package_id: primaryBlock.packageInfo?.id ?? null, scheduled_at: scheduledAt, sale_total: total, location: location || null, locality: locality || null, event_type: eventType || null, service_hours: primaryBlock.serviceHours || null, travel_cost: travelCost, route_distance_meters: route?.distanceMeters ?? null, route_duration_seconds: route?.durationSeconds ?? null, route_toll_amount: route?.toll?.amount ?? null, route_toll_currency: route?.toll?.currency ?? null, route_origin: route?.origin ?? null, details: details || null, package_snapshot: { name: reservationName ?? "Servicio personalizado", base_price: total }, created_by: userId }).select("id").single();
   if (error) throw error;
+  const { error: blocksError } = await supabase.from("event_service_blocks").insert(serviceBlocks.map((block, index) => ({ event_id: createdEvent.id, starts_at: new Date(`${date}T${block.time}:00`).toISOString(), service_hours: block.serviceHours || null, package_id: block.packageInfo?.id ?? null, package_snapshot: { name: block.packageInfo?.name ?? "Servicio personalizado", base_price: block.packageInfo?.base_price ?? 0 }, notes: block.notes || null, sort_order: index })));
+  if (blocksError) throw blocksError;
 }
 
 export async function addPayment({ eventId, amount, note, userId }) {
