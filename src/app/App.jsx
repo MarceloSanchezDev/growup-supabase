@@ -138,6 +138,19 @@ export default function App() {
         .reduce((sum, expense) => sum + expense.amount, 0),
     [expenses, currentMonth],
   );
+  const ownerMonthStats = useMemo(() => {
+    const reservations = events.filter((event) => event.scheduledAt?.startsWith(currentMonth) && !["cancelled", "rescheduled"].includes(event.status));
+    const payments = events.flatMap((event) => event.payments.filter((payment) => payment.paidAt?.startsWith(currentMonth)));
+    const serviceBlocks = reservations.flatMap((event) => event.serviceBlocks ?? []);
+    return {
+      reservations: reservations.length,
+      sold: reservations.reduce((sum, event) => sum + event.total, 0),
+      collected: payments.reduce((sum, payment) => sum + payment.amount, 0),
+      pending: reservations.reduce((sum, event) => sum + Math.max(event.total - event.paid, 0), 0),
+      services: serviceBlocks.length,
+      hours: serviceBlocks.reduce((sum, block) => sum + (block.serviceHours ?? 0), 0),
+    };
+  }, [events, currentMonth]);
   const weeklyEvents = useMemo(() => {
     const start = new Date(`${weekStart}T00:00:00`);
     const end = new Date(`${weekStart}T00:00:00`);
@@ -380,26 +393,18 @@ export default function App() {
               onSubmit={createInquiry}
             />
           )}
-          <section className="metrics">
-            <Metric
-              label={profile?.role === "seller" ? "Mi vendido" : "Vendido"}
-              value={ars(totals.sold)}
-              detail={profile?.role === "seller" ? "Mis eventos registrados" : "Eventos registrados"}
-              tone="purple"
-            />
-            <Metric
-              label={profile?.role === "seller" ? "Mi cobrado" : "Cobrado"}
-              value={ars(totals.collected)}
-              detail={profile?.role === "seller" ? "Pagos de mis eventos" : "Señas y pagos cargados"}
-              tone="pink"
-            />
-            <Metric
-              label={profile?.role === "seller" ? "Mi pendiente" : "Pendiente"}
-              value={ars(totals.sold - totals.collected)}
-              detail={profile?.role === "seller" ? "Saldos de mis eventos" : "Saldos por cobrar"}
-              tone="amber"
-            />
-          </section>
+          {profile?.role === "owner" ? <section className="metrics owner-metrics">
+            <Metric label="Reservas del mes" value={ownerMonthStats.reservations} detail="Eventos activos en agenda" tone="purple" />
+            <Metric label="Vendido del mes" value={ars(ownerMonthStats.sold)} detail="Por fecha del evento" tone="purple" />
+            <Metric label="Cobrado del mes" value={ars(ownerMonthStats.collected)} detail="Pagos recibidos este mes" tone="pink" />
+            <Metric label="Saldo pendiente" value={ars(ownerMonthStats.pending)} detail="De las reservas del mes" tone="amber" />
+            <Metric label="Gastos del mes" value={ars(monthlyExpenses)} detail={`${expenses.filter((expense) => expense.incurred_at?.startsWith(currentMonth)).length} movimientos cargados`} tone="teal" />
+            <Metric label="Operación del mes" value={`${ownerMonthStats.services} servicios`} detail={`${ownerMonthStats.hours.toLocaleString("es-AR", { maximumFractionDigits: 1 })} horas programadas`} tone="pink" />
+          </section> : <section className="metrics">
+            <Metric label="Mi vendido" value={ars(totals.sold)} detail="Mis eventos registrados" tone="purple" />
+            <Metric label="Mi cobrado" value={ars(totals.collected)} detail="Pagos de mis eventos" tone="pink" />
+            <Metric label="Mi pendiente" value={ars(totals.sold - totals.collected)} detail="Saldos de mis eventos" tone="amber" />
+          </section>}
           {profile?.role === "owner" && <WeeklyEventTable events={weeklyEvents} weekStart={weekStart} team={team} onWeekChange={setWeekStart} />}
           <section className="content-grid">
             <CalendarAgenda events={filteredEvents} month={calendarMonth} selectedDay={calendarDay} onMonthChange={(month) => { setCalendarMonth(month); setCalendarDay(""); }} onSelectDay={setCalendarDay} profile={profile} />
