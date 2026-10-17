@@ -392,6 +392,7 @@ export default function App() {
           {showEventForm && (
             <EventForm
               packages={packages}
+              existingEvents={profile?.role === "owner" ? events : dashboardEvents}
               accessToken={session.access_token}
               onClose={() => setShowEventForm(false)}
               onSubmit={createInquiry}
@@ -546,7 +547,10 @@ function NotificationPanel({ notifications, onRead }) {
   );
 }
 
-function EventForm({ packages, accessToken, onClose, onSubmit }) {
+function EventForm({ packages, existingEvents, accessToken, onClose, onSubmit }) {
+  const [clientName, setClientName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [date, setDate] = useState("");
   const [location, setLocation] = useState("");
   const [locality, setLocality] = useState("");
   const [travelCost, setTravelCost] = useState("90300");
@@ -575,6 +579,22 @@ function EventForm({ packages, accessToken, onClose, onSubmit }) {
   }
   const kilometers = route ? (route.distanceMeters / 1000).toLocaleString("es-AR", { maximumFractionDigits: 1 }) : null;
   const minutes = route ? Math.round(route.durationSeconds / 60) : null;
+  const normalize = (value) => value.trim().toLocaleLowerCase("es-AR");
+  const normalizedClient = normalize(clientName);
+  const normalizedPhone = phone.replace(/\D/g, "");
+  const normalizedPlace = normalize([location, locality].filter(Boolean).join(" "));
+  const duplicateMatches = date ? existingEvents.filter((event) => {
+    if (event.scheduledAt?.slice(0, 10) !== date || ["cancelled", "rescheduled"].includes(event.status)) return false;
+    const sameClient = normalizedClient.length >= 3 && normalize(event.client) === normalizedClient;
+    const samePhone = normalizedPhone.length >= 6 && event.phone?.replace(/\D/g, "") === normalizedPhone;
+    const samePlace = normalizedPlace.length >= 4 && normalize([event.location, event.locality].filter(Boolean).join(" ")) === normalizedPlace;
+    return sameClient || samePhone || samePlace;
+  }) : [];
+  const matchReason = (event) => [
+    normalizedClient.length >= 3 && normalize(event.client) === normalizedClient && "mismo cliente",
+    normalizedPhone.length >= 6 && event.phone?.replace(/\D/g, "") === normalizedPhone && "mismo teléfono",
+    normalizedPlace.length >= 4 && normalize([event.location, event.locality].filter(Boolean).join(" ")) === normalizedPlace && "mismo lugar",
+  ].filter(Boolean).join(" · ");
   const addServiceBlock = () => {
     setServiceBlocks((blocks) => [...blocks, { key: nextBlockKey }]);
     setNextBlockKey((key) => key + 1);
@@ -588,16 +608,17 @@ function EventForm({ packages, accessToken, onClose, onSubmit }) {
       </div>
       <form onSubmit={onSubmit}>
         <div className="inline-form-grid">
-          <label>Cliente<input name="client" required /></label>
-          <label>Teléfono<input name="phone" type="tel" /></label>
+          <label>Cliente<input name="client" value={clientName} onChange={(event) => setClientName(event.target.value)} required /></label>
+          <label>Teléfono<input name="phone" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
           <label>Correo<input name="email" type="email" /></label>
           <label>Lugar<input name="location" value={location} onChange={(event) => { setLocation(event.target.value); setRoute(null); }} placeholder="Dirección o salón" /></label>
           <label>Localidad<input name="locality" value={locality} onChange={(event) => { setLocality(event.target.value); setRoute(null); }} /></label>
           <label>Tipo de evento<input name="eventType" placeholder="Ej. cumpleaños, boda o 15 años" /></label>
           <label>Costo interno de viaje<input name="travelCost" type="number" min="0" step="1" value={travelCost} onChange={(event) => setTravelCost(event.target.value)} required /></label>
-          <label>Fecha<input name="date" type="date" required /></label>
+          <label>Fecha<input name="date" type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
           <label className="form-wide">Detalle interno<input name="details" placeholder="Observaciones del evento" /></label>
         </div>
+        {duplicateMatches.length > 0 && <section className="duplicate-warning"><strong>Revisá antes de crear</strong><p>Encontramos {duplicateMatches.length === 1 ? "una reserva que" : `${duplicateMatches.length} reservas que`} podría coincidir con esta carga. Podés continuar si se trata de un evento distinto.</p>{duplicateMatches.slice(0, 3).map((event) => <a key={event.id} href={`#evento=${event.id}`} target="_blank" rel="noreferrer"><span>{event.client} · {event.time}</span><small>{matchReason(event)}</small></a>)}</section>}
         <section className="service-blocks">
           <div className="service-blocks-heading"><div><strong>Servicios y horarios</strong><span>Todos pertenecen a esta misma reserva y se realizan el mismo día.</span></div><button className="link-button" type="button" onClick={addServiceBlock}>+ Agregar horario</button></div>
           {serviceBlocks.map((block, index) => <div className="service-block" key={block.key}>
