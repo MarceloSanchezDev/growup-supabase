@@ -596,6 +596,11 @@ function EventForm({ packages, existingEvents, initialEvent, accessToken, onClos
     const samePlace = normalizedPlace.length >= 4 && normalize([event.location, event.locality].filter(Boolean).join(" ")) === normalizedPlace;
     return sameClient || samePhone || samePlace;
   }) : [];
+  const customerHistory = existingEvents.filter((event) => {
+    const sameClient = normalizedClient.length >= 3 && normalize(event.client) === normalizedClient;
+    const samePhone = normalizedPhone.length >= 6 && event.phone?.replace(/\D/g, "") === normalizedPhone;
+    return sameClient || samePhone;
+  }).sort((first, second) => new Date(second.scheduledAt) - new Date(first.scheduledAt));
   const matchReason = (event) => [
     normalizedClient.length >= 3 && normalize(event.client) === normalizedClient && "mismo cliente",
     normalizedPhone.length >= 6 && event.phone?.replace(/\D/g, "") === normalizedPhone && "mismo teléfono",
@@ -625,6 +630,7 @@ function EventForm({ packages, existingEvents, initialEvent, accessToken, onClos
           <label className="form-wide">Detalle interno<input name="details" defaultValue={initialEvent?.details ?? ""} placeholder="Observaciones del evento" /></label>
         </div>
         {duplicateMatches.length > 0 && <section className="duplicate-warning"><strong>Revisá antes de crear</strong><p>Encontramos {duplicateMatches.length === 1 ? "una reserva que" : `${duplicateMatches.length} reservas que`} podría coincidir con esta carga. Podés continuar si se trata de un evento distinto.</p>{duplicateMatches.slice(0, 3).map((event) => <a key={event.id} href={`#evento=${event.id}`} target="_blank" rel="noreferrer"><span>{event.client} · {event.time}</span><small>{matchReason(event)}</small></a>)}</section>}
+        {customerHistory.length > 0 && <section className="customer-history"><strong>Historial del cliente</strong><p>{customerHistory.length === 1 ? "Tiene 1 reserva registrada." : `Tiene ${customerHistory.length} reservas registradas.`}</p>{customerHistory.slice(0, 3).map((event) => <a key={event.id} href={`#evento=${event.id}`} target="_blank" rel="noreferrer"><span>{event.scheduledAt ? new Date(event.scheduledAt).toLocaleDateString("es-AR") : "Sin fecha"} · {event.packageName}</span><small>{eventStatusLabel[event.status]}</small></a>)}</section>}
         <section className="service-blocks">
           <div className="service-blocks-heading"><div><strong>Servicios y horarios</strong><span>Todos pertenecen a esta misma reserva y se realizan el mismo día.</span></div><button className="link-button" type="button" onClick={addServiceBlock}>+ Agregar horario</button></div>
           {serviceBlocks.map((block, index) => <div className="service-block" key={block.key}>
