@@ -20,6 +20,7 @@ import {
   listPackages,
 } from "../modules/packages/packageService";
 import { listTeam, updateMemberRole } from "../modules/team/teamService";
+import { createResource, createStaffMember, listResources, listStaffMembers } from "../modules/resources/resourceService";
 import ImportScreen from "../modules/imports/ImportScreen";
 import ReportsScreen from "../modules/reports/ReportsScreen";
 import EventDetailScreen from "../modules/events/EventDetailScreen";
@@ -53,6 +54,8 @@ export default function App() {
   const [packages, setPackages] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [resources, setResources] = useState([]);
+  const [staffMembers, setStaffMembers] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [calendarMonth, setCalendarMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -61,6 +64,8 @@ export default function App() {
   const [showEventForm, setShowEventForm] = useState(false);
   const [showPackageForm, setShowPackageForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [showResourceForm, setShowResourceForm] = useState(false);
+  const [showStaffForm, setShowStaffForm] = useState(false);
   const [paymentEvent, setPaymentEvent] = useState(null);
   const [actionEvent, setActionEvent] = useState(null);
   const [message, setMessage] = useState("");
@@ -92,6 +97,8 @@ export default function App() {
           listExpenses()
             .then(setExpenses)
             .catch((error) => setMessage(error.message));
+          listResources().then(setResources).catch((error) => setMessage(error.message));
+          listStaffMembers().then(setStaffMembers).catch((error) => setMessage(error.message));
         }
       })
       .catch((error) => setMessage(error.message));
@@ -241,6 +248,8 @@ export default function App() {
       setMessage(error.message);
     }
   }
+  async function saveResource(event) { event.preventDefault(); const data = new FormData(event.currentTarget); try { await createResource({ name: data.get("name"), category: data.get("category"), quantity: Number(data.get("quantity")) }); setResources(await listResources()); setShowResourceForm(false); setMessage("Recurso agregado."); } catch (error) { setMessage(error.message); } }
+  async function saveStaff(event) { event.preventDefault(); const data = new FormData(event.currentTarget); try { await createStaffMember({ name: data.get("name"), phone: data.get("phone") }); setStaffMembers(await listStaffMembers()); setShowStaffForm(false); setMessage("Integrante agregado."); } catch (error) { setMessage(error.message); } }
   async function registerPayment(event) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -370,6 +379,8 @@ export default function App() {
                   >
                     + Gasto
                   </button>
+                  <button className="link-button" onClick={() => setShowResourceForm(true)}>+ Recurso</button>
+                  <button className="link-button" onClick={() => setShowStaffForm(true)}>+ Personal</button>
                   <button
                     className="link-button"
                     onClick={() => { window.location.hash = "#importar"; window.location.reload(); }}
@@ -494,6 +505,8 @@ export default function App() {
           onSubmit={saveExpense}
         />
       )}{" "}
+      {showResourceForm && <ResourceForm onClose={() => setShowResourceForm(false)} onSubmit={saveResource} />}{" "}
+      {showStaffForm && <StaffForm onClose={() => setShowStaffForm(false)} onSubmit={saveStaff} />}{" "}
       {paymentEvent && (
         <PaymentForm
           event={paymentEvent}
@@ -694,6 +707,8 @@ function PackageForm({ onClose, onSubmit }) {
     </div>
   );
 }
+function ResourceForm({ onClose, onSubmit }) { return <div className="modal-backdrop"><form className="modal" onSubmit={onSubmit}><button className="close" type="button" onClick={onClose}>×</button><h2>Nuevo recurso</h2><label>Nombre<input name="name" required placeholder="Ej. Inflable castillo"/></label><label>Categoría<input name="category" placeholder="Ej. Inflables, spa o sonido"/></label><label>Cantidad disponible<input name="quantity" type="number" min="1" defaultValue="1" required/></label><div className="actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary">Guardar recurso</button></div></form></div>; }
+function StaffForm({ onClose, onSubmit }) { return <div className="modal-backdrop"><form className="modal" onSubmit={onSubmit}><button className="close" type="button" onClick={onClose}>×</button><h2>Nuevo integrante</h2><label>Nombre<input name="name" required placeholder="Nombre y apellido"/></label><label>Teléfono<input name="phone" type="tel" placeholder="Opcional"/></label><div className="actions"><button type="button" onClick={onClose}>Cancelar</button><button className="primary">Guardar integrante</button></div></form></div>; }
 function ExpenseForm({ events, onClose, onSubmit }) {
   const today = new Date().toISOString().slice(0, 10);
   return (
