@@ -321,7 +321,7 @@ export default function App() {
   const eventDetailId = hashParams.get("evento");
   const duplicateEvent = events.find((event) => event.id === hashParams.get("duplicar"));
   if (eventDetailId)
-    return <EventDetailScreen event={events.find((event) => event.id === eventDetailId)} profile={profile} team={team} userId={session.user.id} accessToken={session.access_token} onRefresh={refreshEvents} />;
+    return <EventDetailScreen event={events.find((event) => event.id === eventDetailId)} packages={packages} profile={profile} team={team} userId={session.user.id} accessToken={session.access_token} onRefresh={refreshEvents} />;
   const canEditEvents = profile?.role !== "viewer";
   return (
     <div className="app-shell">
