@@ -62,3 +62,14 @@ export async function rescheduleEvent(eventId, date, time) {
   });
   if (error) throw error;
 }
+
+export async function saveEventRoute(eventId, route) {
+  const { error } = await supabase.from("events").update({
+    route_distance_meters: route.distanceMeters ?? null,
+    route_duration_seconds: route.durationSeconds ?? null,
+    route_toll_amount: route.toll?.amount ?? null,
+    route_toll_currency: route.toll?.currency ?? null,
+    route_origin: route.origin ?? null,
+  }).eq("id", eventId);
+  if (error) throw error;
+}

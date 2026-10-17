@@ -312,7 +312,7 @@ export default function App() {
     return <ReportsScreen profile={profile} events={events} expenses={expenses} team={team} onBack={() => { window.location.hash = ""; window.location.reload(); }} />;
   const eventDetailId = new URLSearchParams(window.location.hash.slice(1)).get("evento");
   if (eventDetailId)
-    return <EventDetailScreen event={events.find((event) => event.id === eventDetailId)} profile={profile} team={team} userId={session.user.id} onRefresh={refreshEvents} />;
+    return <EventDetailScreen event={events.find((event) => event.id === eventDetailId)} profile={profile} team={team} userId={session.user.id} accessToken={session.access_token} onRefresh={refreshEvents} />;
   const canEditEvents = profile?.role !== "viewer";
   return (
     <div className="app-shell">
