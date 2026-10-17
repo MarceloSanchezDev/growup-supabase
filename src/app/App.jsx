@@ -398,6 +398,7 @@ export default function App() {
             <EventForm
               packages={packages}
               existingEvents={profile?.role === "owner" ? events : dashboardEvents}
+              availabilityEvents={calendarEvents}
               accessToken={session.access_token}
               initialEvent={duplicateEvent}
               onClose={() => { window.location.hash = ""; setShowEventForm(false); }}
@@ -553,7 +554,7 @@ function NotificationPanel({ notifications, onRead }) {
   );
 }
 
-function EventForm({ packages, existingEvents, initialEvent, accessToken, onClose, onSubmit }) {
+function EventForm({ packages, existingEvents, availabilityEvents, initialEvent, accessToken, onClose, onSubmit }) {
   const [clientName, setClientName] = useState(initialEvent?.client ?? "");
   const [phone, setPhone] = useState(initialEvent?.phone ?? "");
   const [date, setDate] = useState("");
@@ -563,7 +564,7 @@ function EventForm({ packages, existingEvents, initialEvent, accessToken, onClos
   const [route, setRoute] = useState(null);
   const [routeMessage, setRouteMessage] = useState("");
   const [calculating, setCalculating] = useState(false);
-  const [serviceBlocks, setServiceBlocks] = useState(() => initialEvent?.serviceBlocks?.map((block, index) => ({ ...block, key: index + 1 })) ?? [{ key: 1 }]);
+  const [serviceBlocks, setServiceBlocks] = useState(() => initialEvent?.serviceBlocks?.map((block, index) => ({ ...block, key: index + 1, time: block.time ?? "", serviceHours: block.serviceHours ?? "", packageId: block.packageId ?? "", notes: block.notes ?? "" })) ?? [{ key: 1, time: "", serviceHours: "", packageId: "", notes: "" }]);
   const [nextBlockKey, setNextBlockKey] = useState((initialEvent?.serviceBlocks?.length ?? 1) + 1);
   async function calculateTravel(locationValue = location, localityValue = locality) {
     const destination = [locationValue, localityValue].filter(Boolean).join(", ");
@@ -606,11 +607,21 @@ function EventForm({ packages, existingEvents, initialEvent, accessToken, onClos
     normalizedPhone.length >= 6 && event.phone?.replace(/\D/g, "") === normalizedPhone && "mismo teléfono",
     normalizedPlace.length >= 4 && normalize([event.location, event.locality].filter(Boolean).join(" ")) === normalizedPlace && "mismo lugar",
   ].filter(Boolean).join(" · ");
+  const availabilityConflicts = date ? serviceBlocks.filter((block) => block.time).flatMap((block) => {
+    const start = new Date(`${date}T${block.time}:00`);
+    const end = new Date(start.getTime() + (Number(block.serviceHours) || 1) * 60 * 60 * 1000);
+    return availabilityEvents.filter((event) => !["cancelled", "rescheduled", "completed"].includes(event.status)).flatMap((event) => (event.serviceBlocks?.length ? event.serviceBlocks : [{ id: event.id, startsAt: event.scheduledAt, time: event.time, serviceHours: event.serviceHours, packageName: event.packageName }]).filter((otherBlock) => {
+      const otherStart = new Date(otherBlock.startsAt ?? event.scheduledAt);
+      const otherEnd = new Date(otherStart.getTime() + (Number(otherBlock.serviceHours) || 1) * 60 * 60 * 1000);
+      return start < otherEnd && end > otherStart;
+    }).map((otherBlock) => ({ event, block: otherBlock })));
+  }).filter((item, index, all) => all.findIndex((other) => `${other.event.id}-${other.block.id}` === `${item.event.id}-${item.block.id}`) === index) : [];
   const addServiceBlock = () => {
-    setServiceBlocks((blocks) => [...blocks, { key: nextBlockKey }]);
+    setServiceBlocks((blocks) => [...blocks, { key: nextBlockKey, time: "", serviceHours: "", packageId: "", notes: "" }]);
     setNextBlockKey((key) => key + 1);
   };
   const removeServiceBlock = (key) => setServiceBlocks((blocks) => blocks.length > 1 ? blocks.filter((block) => block.key !== key) : blocks);
+  const updateServiceBlock = (key, field, value) => setServiceBlocks((blocks) => blocks.map((block) => block.key === key ? { ...block, [field]: value } : block));
   return (
     <section className="inline-event-form">
       <div className="inline-form-heading">
@@ -631,14 +642,15 @@ function EventForm({ packages, existingEvents, initialEvent, accessToken, onClos
         </div>
         {duplicateMatches.length > 0 && <section className="duplicate-warning"><strong>Revisá antes de crear</strong><p>Encontramos {duplicateMatches.length === 1 ? "una reserva que" : `${duplicateMatches.length} reservas que`} podría coincidir con esta carga. Podés continuar si se trata de un evento distinto.</p>{duplicateMatches.slice(0, 3).map((event) => <a key={event.id} href={`#evento=${event.id}`} target="_blank" rel="noreferrer"><span>{event.client} · {event.time}</span><small>{matchReason(event)}</small></a>)}</section>}
         {customerHistory.length > 0 && <section className="customer-history"><strong>Historial del cliente</strong><p>{customerHistory.length === 1 ? "Tiene 1 reserva registrada." : `Tiene ${customerHistory.length} reservas registradas.`}</p>{customerHistory.slice(0, 3).map((event) => <a key={event.id} href={`#evento=${event.id}`} target="_blank" rel="noreferrer"><span>{event.scheduledAt ? new Date(event.scheduledAt).toLocaleDateString("es-AR") : "Sin fecha"} · {event.packageName}</span><small>{eventStatusLabel[event.status]}</small></a>)}</section>}
+        {availabilityConflicts.length > 0 && <section className="availability-warning"><strong>Revisá disponibilidad</strong><p>Hay {availabilityConflicts.length === 1 ? "un horario que" : `${availabilityConflicts.length} horarios que`} se superpone con otro evento. GrowUp puede realizar eventos simultáneos, pero verificá equipos y personal antes de confirmar.</p>{availabilityConflicts.slice(0, 3).map(({ event, block }) => <span key={`${event.id}-${block.id}`}>{block.time} · {event.client} · {block.packageName}</span>)}</section>}
         <section className="service-blocks">
           <div className="service-blocks-heading"><div><strong>Servicios y horarios</strong><span>Todos pertenecen a esta misma reserva y se realizan el mismo día.</span></div><button className="link-button" type="button" onClick={addServiceBlock}>+ Agregar horario</button></div>
           {serviceBlocks.map((block, index) => <div className="service-block" key={block.key}>
             <b>Servicio {index + 1}</b>
-            <label>Horario<input name="serviceTime" type="time" defaultValue={block.time} required /></label>
-            <label>Paquete o servicio<select name="servicePackageId" defaultValue={block.packageId ?? ""} required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
-            <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" defaultValue={block.serviceHours ?? ""} placeholder="Ej. 3" /></label>
-            <label>Nota operativa<input name="serviceNote" defaultValue={block.notes ?? ""} placeholder="Ej. armado, segundo turno" /></label>
+            <label>Horario<input name="serviceTime" type="time" value={block.time} onChange={(event) => updateServiceBlock(block.key, "time", event.target.value)} required /></label>
+            <label>Paquete o servicio<select name="servicePackageId" value={block.packageId} onChange={(event) => updateServiceBlock(block.key, "packageId", event.target.value)} required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
+            <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" value={block.serviceHours} onChange={(event) => updateServiceBlock(block.key, "serviceHours", event.target.value)} placeholder="Ej. 3" /></label>
+            <label>Nota operativa<input name="serviceNote" value={block.notes} onChange={(event) => updateServiceBlock(block.key, "notes", event.target.value)} placeholder="Ej. armado, segundo turno" /></label>
             {serviceBlocks.length > 1 && <button className="remove-service" type="button" onClick={() => removeServiceBlock(block.key)} aria-label={`Quitar servicio ${index + 1}`}>×</button>}
           </div>)}
         </section>
