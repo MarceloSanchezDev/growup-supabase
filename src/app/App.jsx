@@ -103,7 +103,7 @@ export default function App() {
   const filteredEvents = useMemo(
     () =>
       calendarEvents.filter((event) =>
-        `${event.client} ${event.packageName}`
+        `${event.client} ${event.phone ?? ""} ${event.packageName} ${(event.serviceBlocks ?? []).map((block) => block.packageName).join(" ")}`
           .toLowerCase()
           .includes(search.toLowerCase()),
       ),
@@ -131,6 +131,10 @@ export default function App() {
       return !["cancelled", "rescheduled", "completed"].includes(item.status) && scheduledAt >= now && scheduledAt <= limit;
     });
   }, [dashboardEvents]);
+  const todayEvents = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return calendarEvents.filter((event) => event.scheduledAt?.slice(0, 10) === today);
+  }, [calendarEvents]);
   const monthlyExpenses = useMemo(
     () =>
       expenses
@@ -407,8 +411,9 @@ export default function App() {
           </section>}
           {profile?.role === "owner" && <WeeklyEventTable events={weeklyEvents} weekStart={weekStart} team={team} onWeekChange={setWeekStart} />}
           <section className="content-grid">
-            <CalendarAgenda events={filteredEvents} month={calendarMonth} selectedDay={calendarDay} onMonthChange={(month) => { setCalendarMonth(month); setCalendarDay(""); }} onSelectDay={setCalendarDay} profile={profile} />
+            <CalendarAgenda events={filteredEvents} search={search} onSearchChange={setSearch} month={calendarMonth} selectedDay={calendarDay} onMonthChange={(month) => { setCalendarMonth(month); setCalendarDay(""); }} onSelectDay={setCalendarDay} profile={profile} />
             <div className="side">
+              <TodayPanel events={todayEvents} profile={profile} />
               <ReminderPanel events={next24Hours} />
               {profile?.role === "owner" && <><NotificationPanel notifications={notifications} onRead={readNotifications} /><article className="result"><span>Resultado mensual</span><strong>{ars(totals.collected - monthlyExpenses)}</strong><small>Cobrado menos gastos cargados del mes.</small></article></>}
               {profile?.role === "seller" && <article className="review"><h2>Mi agenda</h2><p><strong>{dashboardEvents.length}</strong><br />eventos propios disponibles en el calendario.</p></article>}
@@ -515,6 +520,10 @@ function ReminderPanel({ events }) {
       )) : <p className="empty">No hay eventos programados en las próximas 24 horas.</p>}
     </article>
   );
+}
+
+function TodayPanel({ events, profile }) {
+  return <article className="review today-panel"><h2>Hoy <b>{events.length}</b></h2>{events.length ? events.map((event) => { const isOwn = profile?.role === "owner" || event.isOwn || event.createdBy === profile?.id; return <div className="today-item" key={event.id}><div><strong>{event.time} · {event.client}</strong><span>{event.serviceBlocks?.length > 1 ? `${event.serviceBlocks.length} servicios programados` : event.packageName}</span></div>{isOwn && <a className="link-button" href={`#evento=${event.id}`} target="_blank" rel="noreferrer">Ver más</a>}</div>; }) : <p className="empty">No hay eventos para hoy.</p>}</article>;
 }
 
 function NotificationPanel({ notifications, onRead }) {
@@ -797,9 +806,9 @@ function ServiceBlockList({ blocks, fallback, compact = false, showService = fal
   return <div className={`service-block-list${compact ? " compact" : ""}`}>{items.map((block) => <span key={block.id}>{showService ? <>{block.packageName}{block.serviceHours ? ` · ${block.serviceHours} h` : ""}</> : block.time}</span>)}</div>;
 }
 
-function CalendarAgenda({ events, month, selectedDay, onMonthChange, onSelectDay, profile }) {
+function CalendarAgenda({ events, search, onSearchChange, month, selectedDay, onMonthChange, onSelectDay, profile }) {
   const [year, monthNumber] = month.split("-").map(Number); const start = new Date(year, monthNumber - 1, 1).getDay(); const days = new Date(year, monthNumber, 0).getDate();
   const byDay = events.reduce((all, event) => { const date = event.scheduledAt?.slice(0, 10); if (date?.startsWith(month)) (all[date] ??= []).push(event); return all; }, {});
   const selected = selectedDay ? byDay[selectedDay] ?? [] : [];
-  return <article className="agenda calendar-agenda"><div className="section-head"><div><h2>Agenda y calendario</h2><span>{selectedDay ? `Eventos del ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString("es-AR")}` : "Elegí un día para ver el detalle"}</span></div><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} /></div><div className="calendar-week">{"D L M M J V S".split(" ").map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div><div className="calendar-days">{Array.from({ length: start }, (_, index) => <i key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = `${month}-${String(index + 1).padStart(2, "0")}`; const count = byDay[date]?.length ?? 0; return <button type="button" className={selectedDay === date ? "selected" : ""} key={date} onClick={() => onSelectDay(date)}>{index + 1}{count > 0 && <b>{count}</b>}</button>; })}</div>{selectedDay && <div className="event-list">{selected.map((item) => { const showOwnEvent = profile?.role === "owner" || item.isOwn || item.createdBy === profile?.id; const blocks = item.serviceBlocks?.length ? item.serviceBlocks : [{ id: item.id, time: item.time, packageName: item.packageName, serviceHours: item.serviceHours, notes: null }]; return <div className="event reservation-event" key={item.id}><i/><div className="event-main"><div className="reservation-title"><b>{item.client}</b><span>{blocks.length > 1 ? `${blocks.length} servicios dentro de la misma reserva` : "1 servicio"}</span></div><div className="reservation-blocks">{blocks.map((block) => <div key={block.id}><time>{block.time}</time><span>{block.packageName}{block.serviceHours ? ` · ${block.serviceHours} ${block.serviceHours === 1 ? "hora" : "horas"}` : ""}</span>{block.notes && <small>{block.notes}</small>}</div>)}</div></div><div className="event-meta">{profile?.role === "owner" && <b>{ars(item.total)}</b>}<em className={item.status}>{eventStatusLabel[item.status]}</em>{showOwnEvent && <a className="link-button" href={`#evento=${item.id}`} target="_blank" rel="noreferrer">Ver más</a>}</div></div>; })}{selected.length === 0 && <p className="empty">No hay eventos para este día.</p>}</div>}</article>;
+  return <article className="agenda calendar-agenda"><div className="section-head"><div><h2>Agenda y calendario</h2><span>{selectedDay ? `Eventos del ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString("es-AR")}` : "Elegí un día para ver el detalle"}</span></div><input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} /></div><label className="agenda-search"><span>Buscar reserva</span><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Cliente, teléfono o servicio" /></label><div className="calendar-week">{"D L M M J V S".split(" ").map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div><div className="calendar-days">{Array.from({ length: start }, (_, index) => <i key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = `${month}-${String(index + 1).padStart(2, "0")}`; const count = byDay[date]?.length ?? 0; return <button type="button" className={selectedDay === date ? "selected" : ""} key={date} onClick={() => onSelectDay(date)}>{index + 1}{count > 0 && <b>{count}</b>}</button>; })}</div>{selectedDay && <div className="event-list">{selected.map((item) => { const showOwnEvent = profile?.role === "owner" || item.isOwn || item.createdBy === profile?.id; const blocks = item.serviceBlocks?.length ? item.serviceBlocks : [{ id: item.id, time: item.time, packageName: item.packageName, serviceHours: item.serviceHours, notes: null }]; return <div className="event reservation-event" key={item.id}><i/><div className="event-main"><div className="reservation-title"><b>{item.client}</b><span>{blocks.length > 1 ? `${blocks.length} servicios dentro de la misma reserva` : "1 servicio"}</span></div><div className="reservation-blocks">{blocks.map((block) => <div key={block.id}><time>{block.time}</time><span>{block.packageName}{block.serviceHours ? ` · ${block.serviceHours} ${block.serviceHours === 1 ? "hora" : "horas"}` : ""}</span>{block.notes && <small>{block.notes}</small>}</div>)}</div></div><div className="event-meta">{profile?.role === "owner" && <b>{ars(item.total)}</b>}<em className={item.status}>{eventStatusLabel[item.status]}</em>{showOwnEvent && <a className="link-button" href={`#evento=${item.id}`} target="_blank" rel="noreferrer">Ver más</a>}</div></div>; })}{selected.length === 0 && <p className="empty">No hay eventos para este día.</p>}</div>}</article>;
 }
