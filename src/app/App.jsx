@@ -193,6 +193,7 @@ export default function App() {
         userId: session.user.id,
       });
       await refreshEvents();
+      if (new URLSearchParams(window.location.hash.slice(1)).has("duplicar")) window.location.hash = "";
       setShowEventForm(false);
       setMessage("Consulta creada correctamente.");
     } catch (error) {
@@ -314,7 +315,9 @@ export default function App() {
     return <ImportScreen profile={profile} userId={session.user.id} />;
   if (window.location.hash === "#reportes")
     return <ReportsScreen profile={profile} events={events} expenses={expenses} team={team} onBack={() => { window.location.hash = ""; window.location.reload(); }} />;
-  const eventDetailId = new URLSearchParams(window.location.hash.slice(1)).get("evento");
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const eventDetailId = hashParams.get("evento");
+  const duplicateEvent = events.find((event) => event.id === hashParams.get("duplicar"));
   if (eventDetailId)
     return <EventDetailScreen event={events.find((event) => event.id === eventDetailId)} profile={profile} team={team} userId={session.user.id} accessToken={session.access_token} onRefresh={refreshEvents} />;
   const canEditEvents = profile?.role !== "viewer";
@@ -389,12 +392,13 @@ export default function App() {
               )}
             </div>
           </section>
-          {showEventForm && (
+          {(showEventForm || duplicateEvent) && (
             <EventForm
               packages={packages}
               existingEvents={profile?.role === "owner" ? events : dashboardEvents}
               accessToken={session.access_token}
-              onClose={() => setShowEventForm(false)}
+              initialEvent={duplicateEvent}
+              onClose={() => { window.location.hash = ""; setShowEventForm(false); }}
               onSubmit={createInquiry}
             />
           )}
@@ -547,18 +551,18 @@ function NotificationPanel({ notifications, onRead }) {
   );
 }
 
-function EventForm({ packages, existingEvents, accessToken, onClose, onSubmit }) {
-  const [clientName, setClientName] = useState("");
-  const [phone, setPhone] = useState("");
+function EventForm({ packages, existingEvents, initialEvent, accessToken, onClose, onSubmit }) {
+  const [clientName, setClientName] = useState(initialEvent?.client ?? "");
+  const [phone, setPhone] = useState(initialEvent?.phone ?? "");
   const [date, setDate] = useState("");
-  const [location, setLocation] = useState("");
-  const [locality, setLocality] = useState("");
-  const [travelCost, setTravelCost] = useState("90300");
+  const [location, setLocation] = useState(initialEvent?.location ?? "");
+  const [locality, setLocality] = useState(initialEvent?.locality ?? "");
+  const [travelCost, setTravelCost] = useState(String(initialEvent?.travelCost ?? "90300"));
   const [route, setRoute] = useState(null);
   const [routeMessage, setRouteMessage] = useState("");
   const [calculating, setCalculating] = useState(false);
-  const [serviceBlocks, setServiceBlocks] = useState([{ key: 1 }]);
-  const [nextBlockKey, setNextBlockKey] = useState(2);
+  const [serviceBlocks, setServiceBlocks] = useState(() => initialEvent?.serviceBlocks?.map((block, index) => ({ ...block, key: index + 1 })) ?? [{ key: 1 }]);
+  const [nextBlockKey, setNextBlockKey] = useState((initialEvent?.serviceBlocks?.length ?? 1) + 1);
   async function calculateTravel(locationValue = location, localityValue = locality) {
     const destination = [locationValue, localityValue].filter(Boolean).join(", ");
     if (!destination) {
@@ -603,30 +607,30 @@ function EventForm({ packages, existingEvents, accessToken, onClose, onSubmit })
   return (
     <section className="inline-event-form">
       <div className="inline-form-heading">
-        <div><p>Nueva carga</p><h2>Registrar evento</h2><span>Completá los datos sin salir de la agenda.</span></div>
+        <div><p>{initialEvent ? "Reserva duplicada" : "Nueva carga"}</p><h2>{initialEvent ? "Duplicar reserva" : "Registrar evento"}</h2><span>{initialEvent ? "Revisá la fecha y los datos antes de crear la nueva reserva." : "Completá los datos sin salir de la agenda."}</span></div>
         <button className="close" type="button" onClick={onClose} aria-label="Cerrar formulario">×</button>
       </div>
       <form onSubmit={onSubmit}>
         <div className="inline-form-grid">
           <label>Cliente<input name="client" value={clientName} onChange={(event) => setClientName(event.target.value)} required /></label>
           <label>Teléfono<input name="phone" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-          <label>Correo<input name="email" type="email" /></label>
+          <label>Correo<input name="email" type="email" defaultValue={initialEvent?.email ?? ""} /></label>
           <label>Lugar<input name="location" value={location} onChange={(event) => { setLocation(event.target.value); setRoute(null); }} placeholder="Dirección o salón" /></label>
           <label>Localidad<input name="locality" value={locality} onChange={(event) => { setLocality(event.target.value); setRoute(null); }} /></label>
-          <label>Tipo de evento<input name="eventType" placeholder="Ej. cumpleaños, boda o 15 años" /></label>
+          <label>Tipo de evento<input name="eventType" defaultValue={initialEvent?.eventType ?? ""} placeholder="Ej. cumpleaños, boda o 15 años" /></label>
           <label>Costo interno de viaje<input name="travelCost" type="number" min="0" step="1" value={travelCost} onChange={(event) => setTravelCost(event.target.value)} required /></label>
           <label>Fecha<input name="date" type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
-          <label className="form-wide">Detalle interno<input name="details" placeholder="Observaciones del evento" /></label>
+          <label className="form-wide">Detalle interno<input name="details" defaultValue={initialEvent?.details ?? ""} placeholder="Observaciones del evento" /></label>
         </div>
         {duplicateMatches.length > 0 && <section className="duplicate-warning"><strong>Revisá antes de crear</strong><p>Encontramos {duplicateMatches.length === 1 ? "una reserva que" : `${duplicateMatches.length} reservas que`} podría coincidir con esta carga. Podés continuar si se trata de un evento distinto.</p>{duplicateMatches.slice(0, 3).map((event) => <a key={event.id} href={`#evento=${event.id}`} target="_blank" rel="noreferrer"><span>{event.client} · {event.time}</span><small>{matchReason(event)}</small></a>)}</section>}
         <section className="service-blocks">
           <div className="service-blocks-heading"><div><strong>Servicios y horarios</strong><span>Todos pertenecen a esta misma reserva y se realizan el mismo día.</span></div><button className="link-button" type="button" onClick={addServiceBlock}>+ Agregar horario</button></div>
           {serviceBlocks.map((block, index) => <div className="service-block" key={block.key}>
             <b>Servicio {index + 1}</b>
-            <label>Horario<input name="serviceTime" type="time" required /></label>
-            <label>Paquete o servicio<select name="servicePackageId" required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
-            <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" placeholder="Ej. 3" /></label>
-            <label>Nota operativa<input name="serviceNote" placeholder="Ej. armado, segundo turno" /></label>
+            <label>Horario<input name="serviceTime" type="time" defaultValue={block.time} required /></label>
+            <label>Paquete o servicio<select name="servicePackageId" defaultValue={block.packageId ?? ""} required><option value="">Seleccionar paquete</option>{packages.map((item) => <option value={item.id} key={item.id}>{item.name} · {ars(item.base_price)}</option>)}</select></label>
+            <label>Horas de servicio<input name="serviceHours" type="number" min="0.5" step="0.5" defaultValue={block.serviceHours ?? ""} placeholder="Ej. 3" /></label>
+            <label>Nota operativa<input name="serviceNote" defaultValue={block.notes ?? ""} placeholder="Ej. armado, segundo turno" /></label>
             {serviceBlocks.length > 1 && <button className="remove-service" type="button" onClick={() => removeServiceBlock(block.key)} aria-label={`Quitar servicio ${index + 1}`}>×</button>}
           </div>)}
         </section>
